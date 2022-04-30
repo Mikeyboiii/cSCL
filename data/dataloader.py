@@ -1,11 +1,54 @@
+#adapted from https://github.com/ae-foster/pytorch-simclr
+
 import torch
 import torchvision
+from torchvision import transforms
 from PIL import Image
 
 root = ''
 download = False
 
-class cifar10_data_self(torchvision.datasets.CIFAR10):
+
+def get_color_distortion(s=1.0):
+    # s is the strength of color distortion.
+    color_jitter = transforms.ColorJitter(0.8*s, 0.8*s, 0.8*s, 0.2*s)
+    rnd_color_jitter = transforms.RandomApply([color_jitter], p=0.8)
+    rnd_gray = transforms.RandomGrayscale(p=0.2)
+    color_distort = transforms.Compose([
+        rnd_color_jitter,
+        rnd_gray])
+
+    return color_distort
+
+def get_gaussian_blur(im_size, p=0.5):
+    kernel_size = im_size//10
+    transforms = transforms.RandomApply(torch.nn.ModuleList([
+        transforms.GaussianBlur(kernel_size),
+        ]), p=p)
+    return transforms
+
+
+def get_preprocess(dataset, split):
+    if dataset == 'cifar10':
+        img_size = 32
+
+    if split == 'train':
+        preprocess = [
+            transforms.RandomResizedCrop(img_size),
+            transforms.RandomHorizontalFlip(),
+            get_color_distortion(),
+            get_gaussian_blur(img_size),
+            transforms.ToTensor(),
+        ]
+
+    elif split == 'test':
+        preprocess = [
+            transforms.ToTensor(),
+        ]
+
+    return preprocess
+
+class cifar10_data(torchvision.datasets.CIFAR10):
     def __getitem__(self, index):
         """
         Args:
@@ -15,8 +58,6 @@ class cifar10_data_self(torchvision.datasets.CIFAR10):
         """
         img, target = self.data[index], self.targets[index]
 
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
         pil_img = Image.fromarray(img)
 
         if self.transform is not None:
@@ -31,24 +72,26 @@ class cifar10_data_self(torchvision.datasets.CIFAR10):
         return (img, img2), target#, index 
 
 
+def get_loader(dataset, split, normalize, bs, dl=False):
 
-def get_loader(dataset, split, nonormalize, bs, dl=False):
     if dataset == 'cifar10':
-        trans = [torchvision.transforms.ToTensor()]
-        if nonormalize == False: 
-            trans.append(torchvision.transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)))
+        info = {'mean': (0.4914, 0.4822, 0.4465), 'std': (0.2471, 0.2435, 0.2616)}
+        set_class = cifar10_data
+        set_dir = root + '/data/cifar10/'
 
-        if split == 'train':
-            loader = torch.utils.data.DataLoader(
-            cifar10_data_self(root + '/data/', train=True, download=dl,
-                                        transform=torchvision.transforms.Compose(trans)),
-                                        batch_size=bs, shuffle=True)
-        elif split == 'test':
-            loader = torch.utils.data.DataLoader(
-            cifar10_data_self(root + '/data/', train=False, download=dl,
-                                        transform=torchvision.transforms.Compose(trans)),
-                                        batch_size=bs, shuffle=False)
+    trans = get_preprocess(dataset, split)
+    if normalize: 
+        trans.append(transforms.Normalize(info['mean'], info['std']))
 
-        info = {'mean': [0.4914, 0.4822, 0.4465], 'std': [0.2471, 0.2435, 0.2616]}
+    if split == 'train':
+        loader = torch.utils.data.DataLoader(
+        set_class(set_dir, train=True, download=dl,
+                                    transform=torchvision.transforms.Compose(trans)),
+                                    batch_size=bs, shuffle=True)
+    elif split == 'test':
+        loader = torch.utils.data.DataLoader(
+        set_class(set_dir, train=False, download=dl,
+                                    transform=torchvision.transforms.Compose(trans)),
+                                    batch_size=bs, shuffle=False)
 
     return loader, info 

@@ -1,48 +1,92 @@
-from models.simclr import simclr, nt_xent_loss
-from argparse import ArgumentParser
+import torch
+import argparse
+from time import time
+from data.dataloader import get_loader
+from models.simclr import simclr
+from losses import loss_fn
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def train(args):
-    pass
+    assert args.dataset in ['cifar10']
 
+    train_loader, _ = get_loader(args.dataset, 'train', normalize=True, bs=args.bs_train)
+    test_loader, _ = get_loader(args.dataset, 'test', normalize=True, bs=args.bs_test)
 
+    if args.dataset=='cifar10':
+        C, H, W = 3, 32, 32
+        num_classes = 10
 
+    model = simclr(arch='resnet18')
+    model = torch.nn.DataParallel(model)
+    if args.pretrained is not None:
+        model.load_state_dict(torch.load(args.pretrained)['model'])
 
+    model.to(device)
+    model.train()
+    
+    criterion = loss_fn(args)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
+    tic = time()
+
+    for ep in range(args.epochs):
+        train_loss, test_loss = 0, 0
+        for iter, (imgs, labels) in enumerate(train_loader):
+            model.train()
+
+            z1, z2 = model(torch.cat(imgs.to(device), dim=0)).chunk(2, dim=0)
+
+            loss = criterion(z1, z2, labels)
+            train_loss += loss.item()
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        with torch.inference_mode():
+
+            for iter, (imgs, labels) in enumerate(test_loader):
+                model.eval()
+
+                z1, z2 = model(torch.cat(imgs.to(device), dim=0)).chunk(2, dim=0)
+
+                loss = criterion(z1, z2, labels)
+                test_loss += loss.item()
+
+        print('EP%d |train_loss=%.6f |test_loss=%.6f'%(ep, train_loss/args.bs_train, 5 * test_loss/args.bs_test))
+
+        if ep%args.save_freq==0:
+            state = {'model': model.state_dict()}
+            path = args.save_dir + '%s_%s_t%.3f_ep%d'%(args.arch, args.dataset, args.temp, ep)+'.pkl'
+            torch.save(state, path)
+    toc = time()
+    print('Time Elapsed: %dmin' %((toc-tic)//60))
 
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser()
+    root = ''
 
-    # model params
-    parser.add_argument("--arch", default="resnet50", type=str, help="convnet architecture")
-    # specify flags to store false
+    parser = argparse.ArgumentParser()
 
-    parser.add_argument("--hidden_mlp", default=2048, type=int, help="hidden layer dimension in projection head")
-    parser.add_argument("--feat_dim", default=128, type=int, help="feature dimension")
-    parser.add_argument("--online_ft", action="store_true")
-    parser.add_argument("--fp32", action="store_true")
+    parser.add_argument('--dataset', type=str, default='cifar')
+    parser.add_argument('--save_dir', type=str, default=root + '/pretrained_models/')
+    parser.add_argument('--pretrained', type=int, default=None, help='pretrained model path')
 
-    # transform params
-    parser.add_argument("--gaussian_blur", action="store_true", help="add gaussian blur")
-    parser.add_argument("--jitter_strength", type=float, default=1.0, help="jitter strength")
-    parser.add_argument("--dataset", type=str, default="cifar10", help="stl10, cifar10")
-    parser.add_argument("--data_dir", type=str, default=".", help="path to download data")
+    parser.add_argument('--loss_type', type=str, default='cont', help='cont, supcont, c_cont, c_supcont')
+    parser.add_argument('--temp', type=float, default=0.07, help='contrastive loss temperature')
+    parser.add_argument('--beta', type=float, default=128, help='lagrangian multiplier')
 
-    # training params
-    parser.add_argument("--fast_dev_run", default=1, type=int)
-    parser.add_argument("--num_nodes", default=1, type=int, help="number of nodes for training")
-    parser.add_argument("--gpus", default=1, type=int, help="number of gpus to train on")
-    parser.add_argument("--num_workers", default=8, type=int, help="num of workers per GPU")
+    parser.add_argument('--z_dim', type=int, default=256)
 
+    parser.add_argument('--bs_train', type=int, default=256, help='training batchsize')
+    parser.add_argument('--bs_test', type=int, default=256, help='testing batchsize')
+    parser.add_argument('--epochs', type=int, default=120, help='number of epochs')
+    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+    parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
+    parser.add_argument('--save_freq', type=int, default=10, help='frequency of saving model')
 
-    parser.add_argument("--max_epochs", default=100, type=int, help="number of total epochs to run")
-    parser.add_argument("--max_steps", default=-1, type=int, help="max steps")
-    parser.add_argument("--warmup_epochs", default=10, type=int, help="number of warmup epochs")
-    parser.add_argument("--batch_size", default=128, type=int, help="batch size per gpu")
+    args = parser.parse_args()
 
-    parser.add_argument("--temperature", default=0.1, type=float, help="temperature parameter in training loss")
-    parser.add_argument("--weight_decay", default=1e-6, type=float, help="weight decay")
-    parser.add_argument("--learning_rate", default=1e-3, type=float, help="base learning rate")
-    parser.add_argument("--start_lr", default=0, type=float, help="initial warmup learning rate")
-    parser.add_argument("--final_lr", type=float, default=1e-6, help="final learning rate")
+    train(args)
