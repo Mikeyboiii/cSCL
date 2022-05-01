@@ -5,9 +5,7 @@ import torchvision
 from torchvision import transforms
 from PIL import Image
 
-root = ''
-download = False
-
+root = '/home/lz2814_columbia_edu/'
 
 def get_color_distortion(s=1.0):
     # s is the strength of color distortion.
@@ -22,10 +20,10 @@ def get_color_distortion(s=1.0):
 
 def get_gaussian_blur(im_size, p=0.5):
     kernel_size = im_size//10
-    transforms = transforms.RandomApply(torch.nn.ModuleList([
+    transform = transforms.RandomApply(torch.nn.ModuleList([
         transforms.GaussianBlur(kernel_size),
         ]), p=p)
-    return transforms
+    return transform
 
 
 def get_preprocess(dataset, split):

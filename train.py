@@ -35,7 +35,7 @@ def train(args):
         for iter, (imgs, labels) in enumerate(train_loader):
             model.train()
 
-            z1, z2 = model(torch.cat(imgs.to(device), dim=0)).chunk(2, dim=0)
+            z1, z2 = model(torch.cat(imgs, dim=0).to(device)).chunk(2, dim=0)
 
             loss = criterion(z1, z2, labels)
             train_loss += loss.item()
@@ -49,7 +49,7 @@ def train(args):
             for iter, (imgs, labels) in enumerate(test_loader):
                 model.eval()
 
-                z1, z2 = model(torch.cat(imgs.to(device), dim=0)).chunk(2, dim=0)
+                z1, z2 = model(torch.cat(imgs, dim=0).to(device)).chunk(2, dim=0)
 
                 loss = criterion(z1, z2, labels)
                 test_loss += loss.item()
@@ -66,11 +66,11 @@ def train(args):
 
 
 if __name__ == '__main__':
-    root = ''
+    root = '/home/lz2814_columbia_edu/'
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--dataset', type=str, default='cifar')
+    parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--save_dir', type=str, default=root + '/pretrained_models/')
     parser.add_argument('--pretrained', type=int, default=None, help='pretrained model path')
 

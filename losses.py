@@ -1,5 +1,6 @@
 import torch
 from torch import Tensor, nn
+import math
 
 class SyncFunction(torch.autograd.Function):
     @staticmethod
@@ -75,7 +76,7 @@ class loss_fn(nn.Module):
         self.temp = args.temp
         self.beta = args.beta
 
-    def forward(self, z1, z2):
+    def forward(self, z1, z2, labels=None):
         if self.loss_type=='cont':
             return nt_xent_loss(z1, z2, self.temp, eps=1e-6)
         elif self.loss_type=='c_cont':
