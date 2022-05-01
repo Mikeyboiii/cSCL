@@ -51,23 +51,16 @@ def get_features(simclr_model, train_loader, test_loader):
 
 
 def create_data_loaders_from_arrays(X_train, y_train, X_test, y_test, batch_size):
-    train = torch.utils.data.TensorDataset(
-        torch.from_numpy(X_train), torch.from_numpy(y_train)
-    )
-    train_loader = torch.utils.data.DataLoader(
-        train, batch_size=batch_size, shuffle=False
-    )
+    train = torch.utils.data.TensorDataset(torch.from_numpy(X_train), torch.from_numpy(y_train))
+    train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=False)
 
-    test = torch.utils.data.TensorDataset(
-        torch.from_numpy(X_test), torch.from_numpy(y_test)
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test, batch_size=batch_size, shuffle=False
-    )
+    test = torch.utils.data.TensorDataset(torch.from_numpy(X_test), torch.from_numpy(y_test))
+    test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False)
+
     return train_loader, test_loader
 
 
-def train(args, loader, simclr_model, model, criterion, optimizer):
+def train_one_epoch(loader, model, criterion, optimizer):
     loss_epoch = 0
     accuracy_epoch = 0
     for step, (x, y) in enumerate(loader):
@@ -93,7 +86,7 @@ def train(args, loader, simclr_model, model, criterion, optimizer):
     return loss_epoch, accuracy_epoch
 
 
-def test(args, loader, simclr_model, model, criterion, optimizer):
+def test(loader, model, criterion):
     loss_epoch = 0
     accuracy_epoch = 0
     model.eval()
@@ -115,31 +108,10 @@ def test(args, loader, simclr_model, model, criterion, optimizer):
     return loss_epoch, accuracy_epoch
 
 
-def eval():
+def eval(args):
 
-
-    
-
-if __name__ == "__main__":
-
-    root = '/home/lz2814_columbia_edu/'
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--dataset', type=str, default='cifar10')
-    parser.add_argument('--arch', type=str, default='resnet18')
-    parser.add_argument('--z_dim', type=int, default=256)
-
-    parser.add_argument('--model_path', type=str, default=None, help='pretrained model path')
-    parser.add_argument('--bs_train', type=int, default=256, help='training batchsize')
-    parser.add_argument('--bs_test', type=int, default=256, help='testing batchsize')
-
-    parser.add_argument('--epochs', type=int, default=500, help='linear model epochs')
-
-    args = parser.parse_args()
-
-    train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=1, bs=args.bs_train, dl=False)
-    test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=1, bs=args.bs_test, dl=False)
-
+    train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=1, bs=args.bs_emb, dl=False)
+    test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=1, bs=args.bs_emb, dl=False)
 
     n_features = 2048 if args.arch=='resnet50' else 512
 
@@ -151,34 +123,46 @@ if __name__ == "__main__":
     simclr_model.eval()
 
     ## Logistic Regression
-    n_classes = 10  # CIFAR-10 / STL-10
+    if args.dataset in ['cifar10', 'stl10']:
+        n_classes = 10 
     model = LogisticRegression(n_features, n_classes)
     model = model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = torch.nn.CrossEntropyLoss()
 
     print("### Creating features from pre-trained context model ###")
-    (train_X, train_y, test_X, test_y) = get_features(
-        simclr_model, train_loader, test_loader
-    )
+    (train_X, train_y, test_X, test_y) = get_features(simclr_model, train_loader, test_loader)
+    arr_train_loader, arr_test_loader = create_data_loaders_from_arrays(train_X, train_y, test_X, test_y, args.bs)
 
-    arr_train_loader, arr_test_loader = create_data_loaders_from_arrays(
-        train_X, train_y, test_X, test_y, args.bs_train
-    )
 
     for epoch in range(args.epochs):
-        loss_epoch, accuracy_epoch = train(
-            args, arr_train_loader, simclr_model, model, criterion, optimizer
-        )
-        print(
-            f"Epoch [{epoch}/{args.epochs}]\t Loss: {loss_epoch / len(arr_train_loader)}\t Accuracy: {accuracy_epoch / len(arr_train_loader)}"
-        )
+        loss_epoch, accuracy_epoch = train_one_epoch(arr_train_loader, model, criterion, optimizer)
+        print(f"Epoch [{epoch}/{args.epochs}]\t Loss: {loss_epoch / len(arr_train_loader)}\t Accuracy: {accuracy_epoch / len(arr_train_loader)}")
 
     # final testing
-    loss_epoch, accuracy_epoch = test(
-        args, arr_test_loader, simclr_model, model, criterion, optimizer
-    )
-    print(
-        f"[FINAL]\t Loss: {loss_epoch / len(arr_test_loader)}\t Accuracy: {accuracy_epoch / len(arr_test_loader)}"
-    )
+    loss_epoch, accuracy_epoch = test(arr_test_loader, model, criterion)
+    print(f"[FINAL]\t Loss: {loss_epoch / len(arr_test_loader)}\t Accuracy: {accuracy_epoch / len(arr_test_loader)}")
+
+    
+if __name__ == "__main__":
+
+    root = '/home/lz2814_columbia_edu/'
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--dataset', type=str, default='cifar10')
+    parser.add_argument('--arch', type=str, default='resnet18')
+    parser.add_argument('--z_dim', type=int, default=256)
+
+    parser.add_argument('--model_path', type=str, default=None, help='pretrained model path')
+    parser.add_argument('--lr', type=float, default=3e-4)
+
+    parser.add_argument('--bs_emb', type=int, default=1024, help='generate embedding')
+    parser.add_argument('--bs', type=int, default=256, help='train & test linear batchsize')
+
+    parser.add_argument('--epochs', type=int, default=500, help='linear model epochs')
+
+    args = parser.parse_args()
+
+    eval(args)
+
