@@ -26,9 +26,11 @@ def get_gaussian_blur(im_size, p=0.5):
     return transform
 
 
-def get_preprocess(dataset, split):
+def get_preprocess(dataset, split, views):
     if dataset == 'cifar10':
         img_size = 32
+
+    if views==1: return [transforms.ToTensor()]
 
     if split == 'train':
         preprocess = [
@@ -46,7 +48,7 @@ def get_preprocess(dataset, split):
 
     return preprocess
 
-class cifar10_data(torchvision.datasets.CIFAR10):
+class cifar10_pair_data(torchvision.datasets.CIFAR10):
     def __getitem__(self, index):
         """
         Args:
@@ -70,14 +72,18 @@ class cifar10_data(torchvision.datasets.CIFAR10):
         return (img, img2), target#, index 
 
 
-def get_loader(dataset, split, normalize, bs, dl=False):
-
+def get_loader(dataset, split, normalize, bs, views=2, dl=False):
+    assert views==2 or views==1
     if dataset == 'cifar10':
         info = {'mean': (0.4914, 0.4822, 0.4465), 'std': (0.2471, 0.2435, 0.2616)}
-        set_class = cifar10_data
         set_dir = root + '/data/cifar10/'
+        if views==2:
+            set_class = cifar10_pair_data
+        else:
+            set_class = torchvision.datasets.CIFAR10
+        
+    trans = get_preprocess(dataset, split, views)
 
-    trans = get_preprocess(dataset, split)
     if normalize: 
         trans.append(transforms.Normalize(info['mean'], info['std']))
 

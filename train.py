@@ -10,14 +10,14 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 def train(args):
     assert args.dataset in ['cifar10']
 
-    train_loader, _ = get_loader(args.dataset, 'train', normalize=True, bs=args.bs_train)
-    test_loader, _ = get_loader(args.dataset, 'test', normalize=True, bs=args.bs_test)
+    train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=2, bs=args.bs_train, dl=False)
+    test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=2, bs=args.bs_test, dl=False)
 
     if args.dataset=='cifar10':
         C, H, W = 3, 32, 32
         num_classes = 10
 
-    model = simclr(arch='resnet18')
+    model = simclr(z_dim=args.z_dim, arch=args.arch)
     model = torch.nn.DataParallel(model)
     if args.pretrained is not None:
         model.load_state_dict(torch.load(args.pretrained)['model'])
@@ -56,8 +56,8 @@ def train(args):
 
         print('EP%d |train_loss=%.6f |test_loss=%.6f'%(ep, train_loss/args.bs_train, 5 * test_loss/args.bs_test))
 
-        if ep%args.save_freq==0:
-            state = {'model': model.state_dict()}
+        if (ep+1)%args.save_freq==0:
+            state = {'model': model.module.state_dict()} if isinstance(model, torch.nn.DataParallel) else {'model': model.state_dict()} 
             path = args.save_dir + '%s_%s_t%.3f_ep%d'%(args.arch, args.dataset, args.temp, ep)+'.pkl'
             torch.save(state, path)
     toc = time()
@@ -72,7 +72,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--save_dir', type=str, default=root + '/pretrained_models/')
-    parser.add_argument('--pretrained', type=int, default=None, help='pretrained model path')
+    parser.add_argument('--pretrained', type=str, default=None, help='pretrained model path')
+    parser.add_argument('--arch', type=str, default='resnet18')
 
     parser.add_argument('--loss_type', type=str, default='cont', help='cont, supcont, c_cont, c_supcont')
     parser.add_argument('--temp', type=float, default=0.07, help='contrastive loss temperature')
@@ -83,7 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--bs_train', type=int, default=256, help='training batchsize')
     parser.add_argument('--bs_test', type=int, default=256, help='testing batchsize')
     parser.add_argument('--epochs', type=int, default=120, help='number of epochs')
-    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+    parser.add_argument('--lr', type=float, default=3e-4, help='learning rate')
     parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
     parser.add_argument('--save_freq', type=int, default=10, help='frequency of saving model')
 
