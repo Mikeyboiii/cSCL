@@ -1,7 +1,9 @@
 import torch
 from torch import Tensor, nn
 import math
-from models.entropy_model import Compressor
+from models.entropy_model import Compressor, FactorizedCompressor
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class SyncFunction(torch.autograd.Function):
     @staticmethod
@@ -163,15 +165,29 @@ class loss_fn(nn.Module):
         self.loss_type = args.loss_type
         self.temp = args.temp
         self.beta = args.beta
+        self.args = args
 
-    def forward(self, z1, z2, labels=None):
+    def forward(self, h1, h2, z1, z2, labels=None):
         if self.loss_type=='cont':
-            return nt_xent_loss(z1, z2, self.temp, eps=1e-6)
+            cont_loss = nt_xent_loss(z1, z2, self.temp, eps=1e-6)
+            return cont_loss,  None
         elif self.loss_type=='c_cont':
-            comp = Compressor(z1.shape[1], z1.shape[1])
-            z_hat, z_bits, zz_bits = comp(torch.cat[z1, z2], dim=0)
-            z1, z2 = z_hat.chunk(2, dim=0)
-            return nt_xent_loss(z1, z2, self.temp, eps=1e-6) + self.beta * (z_bits.sum() +  zz_bits.sum())
+            #comp = Compressor(z1.shape[1], z1.shape[1]).to(device)
+            #z_hat, z_bits, zz_bits = comp(torch.cat([z1, z2], dim=0))
+            cont_loss = nt_xent_loss(z1, z2, self.temp, eps=1e-6)
+
+            if self.args.compress_rep == 'h':
+                y1, y2 = h1.squeeze(2).squeeze(2), h2.squeeze(2).squeeze(2)
+            else:
+                y1, y2 = z1.squeeze(2).squeeze(2), z2.squeeze(2).squeeze(2)
+            
+            comp = FactorizedCompressor(y1.shape[1]).to(device)
+            _, y_bits = comp(torch.cat([y1, y2], dim=0))
+
+            #print(cont_loss.item(), y_bits.item())
+
+            return cont_loss, y_bits
+
         elif self.loss_type=='supcont':
             pass
         elif self.loss_type=='c_supcont':

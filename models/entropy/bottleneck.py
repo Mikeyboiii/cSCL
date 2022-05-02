@@ -37,9 +37,9 @@ class EntropyModel(nn.Module):
             raise ValueError(f'Invalid quantization mode: "{mode}"')
 
         if mode == "noise":
-            half = float(0.5)
-            noise = torch.empty_like(inputs).uniform_(-half, half)
-            inputs = inputs + noise
+            #half = float(0.5)
+            #noise = torch.empty_like(inputs).uniform_(-half, half)
+            #inputs = inputs# + noise
             return inputs
 
         outputs = inputs.clone()
@@ -200,7 +200,7 @@ class EntropyBottleneck(EntropyModel):
         # Add noise or quantize
 
         outputs = self.quantize(
-            values, "noise" if training else "dequantize", self._get_medians()
+            values, 'noise', self._get_medians()
         )
 
         if not torch.jit.is_scripting():
@@ -236,6 +236,9 @@ class Gaussian_Model(nn.Module):
         l_bound = LowerBound(1e-8).to(device)
         
         scales = scale_bound(torch.abs(scales))
+
+        #print(latents.max(), latents.min())
+        #print(means.max(), means.min(), scales.max(), scales.min())
 
         gaussian = tdist.normal.Normal(means,scales)
         likelihoods = gaussian.cdf(latents + 0.5) - gaussian.cdf(latents - 0.5)

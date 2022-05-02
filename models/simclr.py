@@ -52,19 +52,24 @@ class simclr(nn.Module):
     def forward(self, x):
         
         h = self.encoder(x)
+        if self.training:
+            h = h + torch.rand_like(h).to(device) - 0.5
+        else:
+            h = torch.round(h)
+
         z = self.projector(h)
-        return z
+        return h, z
         
 
 if __name__ == '__main__':
-    x = torch.rand([4, 3, 224, 224])
-    y = torch.rand([4, 3, 224, 224])
-    model = simclr(arch='resnet18')
-    zx, zy = model(torch.cat([x, y], dim=0)).chunk(2, dim=0)
-    print(zx.shape, zy.shape)
+    #x = torch.rand([4, 3, 224, 224])
+    #y = torch.rand([4, 3, 224, 224])
+    #model = simclr(arch='resnet18')
+    #zx, zy = model(torch.cat([x, y], dim=0)).chunk(2, dim=0)
+    #print(zx.shape, zy.shape)
 
 
-
+    print(encoder(x).shape)
     #loss = nt_xent_loss(zx, zy, 0.1, eps=1e-6)
 
     #print(loss)

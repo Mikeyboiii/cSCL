@@ -115,7 +115,6 @@ def eval(args):
 
     n_features = 2048 if args.arch=='resnet50' else 512
 
-    args.model_path = root + 'pretrained_models/resnet18_cifar10_t0.070_ep99.pkl'
     simclr_model = simclr(z_dim=args.z_dim, arch=args.arch)
     simclr_model.load_state_dict(torch.load(args.model_path)['model'])
     simclr_model.to(device)
@@ -152,7 +151,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--arch', type=str, default='resnet18')
-    parser.add_argument('--z_dim', type=int, default=256)
+    parser.add_argument('--z_dim', type=int, default=128)
 
     parser.add_argument('--model_path', type=str, default=None, help='pretrained model path')
     parser.add_argument('--lr', type=float, default=3e-4)
@@ -161,8 +160,8 @@ if __name__ == "__main__":
     parser.add_argument('--bs', type=int, default=256, help='train & test linear batchsize')
 
     parser.add_argument('--epochs', type=int, default=500, help='linear model epochs')
-
     args = parser.parse_args()
 
+    args.model_path = root + 'pretrained_models/resnet18_cifar10_cont_t0.070_ep99.pkl'
     eval(args)
 
