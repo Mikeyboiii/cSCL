@@ -59,6 +59,8 @@ def train(args):
 
                 h, z = model(torch.cat(imgs, dim=0).to(device))
 
+                h1, h2 = h.chunk(2, dim=0)
+                z1, z2 = z.chunk(2, dim=0)
                 cont, rate = criterion(h1, h2, z1, z2, labels)
                 loss = cont + args.beta * rate
                 test_loss += loss.item()

@@ -86,7 +86,7 @@ class FactorizedCompressor(nn.Module):
     def forward(self, z):
  
         z_hat, z_bits = self.factorized_entropy(z.unsqueeze(2).unsqueeze(3))
-        rate_z =  z_bits / (z.shape[0], z.shape[1])
+        rate_z =  z_bits / (z.shape[0] * z.shape[1])
 
         return z_hat.squeeze(0).squeeze(0), rate_z
 
