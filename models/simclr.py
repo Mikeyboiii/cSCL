@@ -6,6 +6,14 @@ from torchvision.models import resnet50, resnet18
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+class Quantize(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input):
+        return torch.round(input)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output
 
 class Projection(nn.Module):
     def __init__(self, c_in=2048, c_out=256):
@@ -52,12 +60,8 @@ class simclr(nn.Module):
     def forward(self, x):
         
         h = self.encoder(x)
-        if self.training:
-            h = h + torch.rand_like(h).to(device) - 0.5
-        else:
-            h = torch.round(h)
-
-        z = self.projector(h)
+        h_hat = Quantize.apply(h)
+        z = self.projector(h_hat)
         return h, z
         
 

@@ -11,6 +11,7 @@ def deconv(cin, cout, ksize, stride):
     pad = ksize//2
     return nn.ConvTranspose2d(in_channels=cin, out_channels=cout, kernel_size=ksize, stride=stride, padding=pad, output_padding=pad-1)
 
+
 class Compressor(nn.Module):
     '''
     A Mean Scale hyper prior entropy model for estimating the entropy of a representation
@@ -85,7 +86,7 @@ class FactorizedCompressor(nn.Module):
     def forward(self, z):
  
         z_hat, z_bits = self.factorized_entropy(z.unsqueeze(2).unsqueeze(3))
-        rate_z =  z_bits/z.shape[1]
+        rate_z =  z_bits / (z.shape[0], z.shape[1])
 
         return z_hat.squeeze(0).squeeze(0), rate_z
 
