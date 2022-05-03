@@ -1,16 +1,31 @@
 import torch
 from torch import nn
-from .entropy.bottleneck import EntropyBottleneck, Gaussian_Model
+from compressai.entropy_models import EntropyBottleneck, GaussianConditional
+import math
+from torchvision.models import resnet18
+#from .entropy.bottleneck import EntropyBottleneck, Gaussian_Model
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def conv(cin, cout, ksize, stride):
-    return nn.Conv2d(in_channels=cin, out_channels=cout, kernel_size=ksize, stride=stride, padding=ksize//2)
+def conv(in_channels, out_channels, kernel_size=3, stride=2):
+    return nn.Conv2d(
+        in_channels,
+        out_channels,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=kernel_size // 2,
+    )
 
-def deconv(cin, cout, ksize, stride):
-    pad = ksize//2
-    return nn.ConvTranspose2d(in_channels=cin, out_channels=cout, kernel_size=ksize, stride=stride, padding=pad, output_padding=pad-1)
 
+def deconv(in_channels, out_channels, kernel_size=3, stride=2):
+    return nn.ConvTranspose2d(
+        in_channels,
+        out_channels,
+        kernel_size=kernel_size,
+        stride=stride,
+        output_padding=stride - 1,
+        padding=kernel_size // 2,
+    )
 
 class Compressor(nn.Module):
     '''
@@ -79,22 +94,64 @@ class FactorizedCompressor(nn.Module):
     '''
     def __init__(self, z_dim):
         super().__init__()
-
         self.factorized_entropy = EntropyBottleneck(z_dim)
         
-
     def forward(self, z):
- 
-        z_hat, z_bits = self.factorized_entropy(z.unsqueeze(2).unsqueeze(3))
-        rate_z =  z_bits / (z.shape[0] * z.shape[1])
+        
+        z_hat, z_likelihoods = self.factorized_entropy(z)
+        #print(z, z_likelihoods)
+        #print(z_likelihoods)
 
-        return z_hat.squeeze(0).squeeze(0), rate_z
+        bpp = torch.sum(-1.0*torch.log2(z_likelihoods)) / (z.shape[0] * z.shape[1] * z.shape[2] * z.shape[3])
+
+        return bpp
+
+class AECompress(nn.Module):
+    def __init__(self, N, M):
+        super().__init__()
+        self.factorized_entropy = EntropyBottleneck(M)
+        backbone = resnet18(pretrained=False)
+        self.g_a = nn.Sequential(
+            backbone.conv1,
+            backbone.bn1,
+            backbone.relu,
+            backbone.maxpool,
+            backbone.layer1,
+            backbone.layer2,
+            backbone.layer3,
+            backbone.layer4,
+            backbone.avgpool,
+        )
+
+        self.g_s = nn.Sequential(
+            deconv(M, N),
+            nn.ReLU(),
+            deconv(N, N),
+            nn.ReLU(),
+            deconv(N, N),
+            nn.ReLU(),
+            deconv(N, N),
+            nn.ReLU(),
+            deconv(N, 3),
+        )
+
+        self.N = N
+        self.M = M
+
+    def forward(self, x):
+        y = self.g_a(x)
+        #print(y.shape)
+        y_hat, y_likelihoods = self.factorized_entropy(y)
+        x_hat = self.g_s(y_hat)
+
+
+        return x_hat, y_likelihoods
 
 
 
 if __name__ == '__main__':
-    comp = Compressor(128, 192)
-    x = torch.ones([4, 128, 1, 1])
+    comp = Compressor(64, 128)
+    loader = get_loader()
     x_hat, rx, rz = comp(x)
 
     print(x_hat.shape, rx, rz)

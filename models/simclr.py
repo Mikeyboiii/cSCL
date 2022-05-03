@@ -3,6 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torchvision.models import resnet50, resnet18
+from compressai.entropy_models import EntropyBottleneck, GaussianConditional
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -35,7 +36,7 @@ class Projection(nn.Module):
         return F.normalize(x, dim=1)
 
 class simclr(nn.Module):
-    def __init__(self, z_dim=256, arch='resnet50'):
+    def __init__(self, z_dim=256, arch='resnet50', compress=False):
         super().__init__()
         assert arch in ['resnet50', 'resnet18']
         if arch == 'resnet50':
@@ -57,12 +58,24 @@ class simclr(nn.Module):
         )
         self.projector = Projection(c_in=c_in, c_out=z_dim)
 
+        if compress:
+            self.factorized_entropy = EntropyBottleneck(c_in)
+
+        self.compress = compress
+
+
     def forward(self, x):
         
         h = self.encoder(x)
         h_hat = Quantize.apply(h)
         z = self.projector(h_hat)
-        return h, z
+
+        if self.compress:
+            _, llh = self.factorized_entropy(h)
+            rate = torch.sum(-1.0*torch.log2(llh)) / (h.shape[0] * h.shape[1] * h.shape[2] * h.shape[3])
+        else:
+            rate = None
+        return h, z, rate
         
 
 if __name__ == '__main__':

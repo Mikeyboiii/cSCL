@@ -20,7 +20,11 @@ def train(args):
         C, H, W = 3, 32, 32
         num_classes = 10
 
-    model = simclr(z_dim=args.z_dim, arch=args.arch)
+    compress = False
+    if args.loss_type in ['c_cont', 'c_supcont']:
+        compress = True
+
+    model = simclr(z_dim=args.z_dim, arch=args.arch, compress=compress)
     model = torch.nn.DataParallel(model)
     if args.pretrained is not None:
         model.load_state_dict(torch.load(args.pretrained)['model'])
@@ -38,15 +42,18 @@ def train(args):
         for iter, (imgs, labels) in enumerate(train_loader):
             model.train()
 
-            h, z = model(torch.cat(imgs, dim=0).to(device))
+            h, z, rate = model(torch.cat(imgs, dim=0).to(device))
 
             h1, h2 = h.chunk(2, dim=0)
             z1, z2 = z.chunk(2, dim=0)
-            cont, rate = criterion(h1, h2, z1, z2, labels)
+
+            cont = criterion(z1, z2, labels)
             loss = cont + args.beta * rate
             train_loss += loss.item()
             train_cont += cont.item()
             train_rate += rate.item()
+
+            #print(cont.item(), rate.item())
 
             optimizer.zero_grad()
             loss.backward()
@@ -57,13 +64,14 @@ def train(args):
             for iter, (imgs, labels) in enumerate(test_loader):
                 model.eval()
 
-                h, z = model(torch.cat(imgs, dim=0).to(device))
+                h, z, rate = model(torch.cat(imgs, dim=0).to(device))
 
                 h1, h2 = h.chunk(2, dim=0)
                 z1, z2 = z.chunk(2, dim=0)
-                cont, rate = criterion(h1, h2, z1, z2, labels)
+                cont = criterion(z1, z2, labels)
                 loss = cont + args.beta * rate
                 test_loss += loss.item()
+                test_cont += cont.item()
                 test_rate += rate.item()
 
         print('EP%d |train_loss=%.6f |test_loss=%.6f| train_cont=%.6f| train_bits=%.6f| test_cont=%.6f| test_bits=%.6f'
