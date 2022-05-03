@@ -27,67 +27,6 @@ def deconv(in_channels, out_channels, kernel_size=3, stride=2):
         padding=kernel_size // 2,
     )
 
-class Compressor(nn.Module):
-    '''
-    A Mean Scale hyper prior entropy model for estimating the entropy of a representation
-    '''
-    def __init__(self, N, M):
-        super().__init__()
-        self.hyper_encoder = nn.Sequential(
-            nn.Linear(N, M),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(M, M),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(M, M),
-        )
-        self.hyper_decoder = nn.Sequential(
-            nn.Linear(M, M),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(M, M),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(M, N),
-            nn.LeakyReLU(inplace=True),
-        )
-        self.mean_head = nn.Sequential(
-            nn.Linear(N, N),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(N, N),
-        )
-        self.std_head = nn.Sequential(
-            nn.Linear(N, N),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(N, N),
-        )
-
-        self.factorized_entropy = EntropyBottleneck(M)
-        self.gaussian_entropy = Gaussian_Model()
-        
-
-    def forward(self, y):
-        y = y.unsqueeze(2).unsqueeze(2)
-        noise = torch.rand_like(y) - 0.5
-        y_hat = y + noise.to(device)
-
-        z = self.hyper_encoder(y.squeeze(2).squeeze(2))
- 
-        z_hat, z_bits = self.factorized_entropy(z.unsqueeze(2).unsqueeze(3))
-
-        hyper_out = self.hyper_decoder(z_hat.squeeze(2).squeeze(2))
-
-
-        mu = self.mean_head(hyper_out).unsqueeze(2).unsqueeze(2)
-        sigma = self.std_head(hyper_out).unsqueeze(2).unsqueeze(2)
-
-
-        y_bits = self.gaussian_entropy(y, sigma, mu)
-
-        rate_y, rate_z = y_bits/y.shape[1] , z_bits/z.shape[1]
-
-        print(rate_y, rate_z)
-
-        return y_hat.squeeze(0).squeeze(0), rate_y, rate_z
-
-
 class FactorizedCompressor(nn.Module):
     '''
     A Factorized entropy model for estimating the entropy of a representation
@@ -104,6 +43,49 @@ class FactorizedCompressor(nn.Module):
 
         return bpp
 
+class HyperPrior(nn.Module):
+  def __init__(self, N, M):
+    super().__init__()
+    self.hyper_encoder = nn.Sequential(
+        nn.Linear(N, N),
+        nn.LeakyReLU(inplace=True),
+        nn.Linear(N,N),
+        nn.LeakyReLU(inplace=True),
+        nn.Linear(N,M),
+    )
+    self.mean = nn.Sequential(
+        nn.Linear(M, N),
+        nn.LeakyReLU(inplace=True),
+        nn.Linear(N,N),
+        nn.LeakyReLU(inplace=True),
+        nn.Linear(N,N),
+    )
+    self.std = nn.Sequential(
+        nn.Linear(M, N),
+        nn.LeakyReLU(inplace=True),
+        nn.Linear(N,N),
+        nn.LeakyReLU(inplace=True),
+        nn.Linear(N,N),
+    )
+
+    self.factorized = EntropyBottleneck(M)
+    self.gaussian_conditional = GaussianConditional(N)
+    self.N, self.M = N, M
+  def forward(self, x):
+    B= x.shape[0]
+    x_num = B * self.N
+    z_num = B * self.M
+
+    z = self.hyper_encoder(x.squeeze(2).squeeze(2))
+    z_hat, z_llh = self.factorized(z.unsqueeze(2).unsqueeze(2))
+    mu = self.mean(z_hat.squeeze(2).squeeze(2)).unsqueeze(2).unsqueeze(2)
+    sigma = self.std(z_hat.squeeze(2).squeeze(2)).unsqueeze(2).unsqueeze(2)
+    x_hat, x_llh = self.gaussian_conditional(x, scales=sigma, means=mu)
+
+    rate_x =  (torch.sum(-1.0*torch.log2(x_llh)) / x_num)
+    rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
+
+    return rate_x + rate_z
 
 if __name__ == '__main__':
     comp = Compressor(64, 128)

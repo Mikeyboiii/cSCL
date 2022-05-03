@@ -109,7 +109,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
     parser.add_argument('--lr', type=float, default=3e-4, help='learning rate')
     parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
-    parser.add_argument('--save_freq', type=int, default=20, help='frequency of saving model')
+    parser.add_argument('--save_freq', type=int, default=50, help='frequency of saving model')
 
     args = parser.parse_args()
     train(args)
