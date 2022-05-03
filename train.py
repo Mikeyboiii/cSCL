@@ -3,7 +3,7 @@ import argparse
 from time import time
 from data.dataloader import get_loader
 from models.simclr import simclr
-from losses import loss_fn
+from losses import SupConLoss
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -15,10 +15,6 @@ def train(args):
 
     train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=2, bs=args.bs_train, dl=False)
     test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=2, bs=args.bs_test, dl=False)
-
-    if args.dataset=='cifar10':
-        C, H, W = 3, 32, 32
-        num_classes = 10
 
     compress = False
     if args.loss_type in ['c_cont', 'c_supcont']:
@@ -32,9 +28,9 @@ def train(args):
     model.to(device)
     model.train()
     
-    criterion = loss_fn(args)
-
+    criterion = SupConLoss(temperature=args.temp)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
+
     tic = time()
 
     for ep in range(args.epochs):
@@ -42,18 +38,18 @@ def train(args):
         for iter, (imgs, labels) in enumerate(train_loader):
             model.train()
 
-            h, z, rate = model(torch.cat(imgs, dim=0).to(device))
-
-            h1, h2 = h.chunk(2, dim=0)
+            z, rate = model(torch.cat(imgs, dim=0).to(device))
             z1, z2 = z.chunk(2, dim=0)
+            batch = torch.cat([z1.unsqueeze(1), z2.unsqueeze(1)], dim=1)
 
-            cont = criterion(z1, z2, labels)
+            if 'sup' not in args.loss_type:
+                cont = criterion(batch)
+            else:
+                cont = criterion(batch, labels)
             loss = cont + args.beta * rate
             train_loss += loss.item()
             train_cont += cont.item()
             train_rate += rate.item()
-
-            #print(cont.item(), rate.item())
 
             optimizer.zero_grad()
             loss.backward()
@@ -64,11 +60,14 @@ def train(args):
             for iter, (imgs, labels) in enumerate(test_loader):
                 model.eval()
 
-                h, z, rate = model(torch.cat(imgs, dim=0).to(device))
-
-                h1, h2 = h.chunk(2, dim=0)
+                z, rate = model(torch.cat(imgs, dim=0).to(device))
                 z1, z2 = z.chunk(2, dim=0)
-                cont = criterion(z1, z2, labels)
+                batch = torch.cat([z1.unsqueeze(1), z2.unsqueeze(1)], dim=1)
+
+                if 'sup' not in args.loss_type:
+                    cont = criterion(batch)
+                else:
+                    cont = criterion(batch, labels)
                 loss = cont + args.beta * rate
                 test_loss += loss.item()
                 test_cont += cont.item()
@@ -88,7 +87,6 @@ def train(args):
     print('Time Elapsed: %dmin' %((toc-tic)//60))
 
 
-
 if __name__ == '__main__':
     root = '/home/lz2814_columbia_edu/'
 
@@ -101,7 +99,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--loss_type', type=str, default='cont', help='cont, supcont, c_cont, c_supcont')
     parser.add_argument('--temp', type=float, default=0.07, help='contrastive loss temperature')
-    parser.add_argument('--beta', type=float, default=1024, help='lagrangian multiplier')
+    parser.add_argument('--beta', type=float, default=0.5, help='lagrangian multiplier')
     parser.add_argument('--compress_rep', type=str, default='h', help='compress h or z')
 
     parser.add_argument('--z_dim', type=int, default=128)
@@ -114,5 +112,4 @@ if __name__ == '__main__':
     parser.add_argument('--save_freq', type=int, default=20, help='frequency of saving model')
 
     args = parser.parse_args()
-
     train(args)

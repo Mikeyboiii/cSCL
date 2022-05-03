@@ -99,54 +99,10 @@ class FactorizedCompressor(nn.Module):
     def forward(self, z):
         
         z_hat, z_likelihoods = self.factorized_entropy(z)
-        #print(z, z_likelihoods)
-        #print(z_likelihoods)
 
         bpp = torch.sum(-1.0*torch.log2(z_likelihoods)) / (z.shape[0] * z.shape[1] * z.shape[2] * z.shape[3])
 
         return bpp
-
-class AECompress(nn.Module):
-    def __init__(self, N, M):
-        super().__init__()
-        self.factorized_entropy = EntropyBottleneck(M)
-        backbone = resnet18(pretrained=False)
-        self.g_a = nn.Sequential(
-            backbone.conv1,
-            backbone.bn1,
-            backbone.relu,
-            backbone.maxpool,
-            backbone.layer1,
-            backbone.layer2,
-            backbone.layer3,
-            backbone.layer4,
-            backbone.avgpool,
-        )
-
-        self.g_s = nn.Sequential(
-            deconv(M, N),
-            nn.ReLU(),
-            deconv(N, N),
-            nn.ReLU(),
-            deconv(N, N),
-            nn.ReLU(),
-            deconv(N, N),
-            nn.ReLU(),
-            deconv(N, 3),
-        )
-
-        self.N = N
-        self.M = M
-
-    def forward(self, x):
-        y = self.g_a(x)
-        #print(y.shape)
-        y_hat, y_likelihoods = self.factorized_entropy(y)
-        x_hat = self.g_s(y_hat)
-
-
-        return x_hat, y_likelihoods
-
 
 
 if __name__ == '__main__':

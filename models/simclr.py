@@ -63,7 +63,6 @@ class simclr(nn.Module):
 
         self.compress = compress
 
-
     def forward(self, x):
         
         h = self.encoder(x)
@@ -74,8 +73,8 @@ class simclr(nn.Module):
             _, llh = self.factorized_entropy(h)
             rate = torch.sum(-1.0*torch.log2(llh)) / (h.shape[0] * h.shape[1] * h.shape[2] * h.shape[3])
         else:
-            rate = None
-        return h, z, rate
+            rate = torch.tensor([0]).to(device)
+        return z, rate
         
 
 if __name__ == '__main__':
