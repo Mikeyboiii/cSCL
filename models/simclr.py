@@ -77,6 +77,50 @@ class simclr(nn.Module):
         return z, rate
         
 
+class c_resnet(nn.Module):
+    def __init__(self, num_classes=10, arch='resnet50', compress=False):
+        super().__init__()
+        assert arch in ['resnet50', 'resnet18']
+        if arch == 'resnet50':
+            backbone = resnet50(pretrained=False)
+            c_in = 2048
+        elif arch == 'resnet18':
+            backbone = resnet18(pretrained=False)
+            c_in = 512
+        self.encoder = nn.Sequential(
+            backbone.conv1,
+            backbone.bn1,
+            backbone.relu,
+            backbone.maxpool,
+            backbone.layer1,
+            backbone.layer2,
+            backbone.layer3,
+            backbone.layer4,
+            backbone.avgpool,
+        )
+        self.fc = nn.Linear(c_in, num_classes)
+
+        if compress:
+            self.factorized_entropy = EntropyBottleneck(c_in)
+
+        self.compress = compress
+
+    def forward(self, x):
+        
+        h = self.encoder(x)
+        h_hat = Quantize.apply(h)
+        out = torch.flatten(h_hat, 1)
+        out = self.fc(out)
+
+
+        if self.compress:
+            _, llh = self.factorized_entropy(h)
+            rate = torch.sum(-1.0*torch.log2(llh)) / (h.shape[0] * h.shape[1] * h.shape[2] * h.shape[3])
+        else:
+            rate = torch.tensor([0]).to(device)
+        return out, rate
+
+
 if __name__ == '__main__':
     #x = torch.rand([4, 3, 224, 224])
     #y = torch.rand([4, 3, 224, 224])

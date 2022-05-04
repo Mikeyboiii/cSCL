@@ -1,0 +1,111 @@
+import torch
+import argparse
+from time import time
+from data.dataloader import get_loader
+from models.simclr import c_resnet
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+def train(args):
+    print('\nTraining: Dataset: %s |arch: %s |loss_type:%s |beta=%.3f| compress_rep:%s| lr=%.4f' %(
+        args.dataset, args.arch, args.loss_type, args.beta, args.compress_rep, args.lr
+    ))
+    assert args.dataset in ['cifar10']
+    if args.dataset=='cifar10':
+        num_classes = 10
+
+    train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=1, bs=args.bs_train, dl=True, augment=False)
+    test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=1, bs=args.bs_test, dl=True, augment=False)
+
+    compress = False
+    if args.loss_type == 'c_ce'
+        compress = True
+
+    model = simclr(num_classes=num_classes, arch=args.arch, compress=compress)
+    model = torch.nn.DataParallel(model)
+    if args.pretrained is not None:
+        model.module.load_state_dict(torch.load(args.pretrained)['model'])
+
+    model.to(device)
+    model.train()
+    
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
+
+    tic = time()
+
+    for ep in range(args.epochs):
+        train_loss, test_loss, train_ce, train_rate, test_ce, test_rate = 0, 0, 0, 0, 0, 0
+        for iter, (imgs, labels) in enumerate(train_loader):
+            model.train()
+            x = imgs.to(device)
+
+            logits, rate = model(x)
+            ce = criterion(logits, labels)
+
+            loss = ce + args.beta * rate
+            train_loss += loss.item()
+            train_ce += ce.item()
+            train_rate += rate.item()
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        with torch.inference_mode():
+            correct = 0
+            total = 0
+            for iter, (imgs, labels) in enumerate(test_loader):
+                model.eval()
+
+                x = imgs.to(device)
+
+                logits, rate = model(x)
+                ce = criterion(logits, labels)
+                preds = torch.argmax(logits, 1)
+
+                loss = ce + args.beta * rate
+                test_loss += loss.item()
+                test_ce += ce.item()
+                test_rate += rate.item()
+
+                correct += (preds==labels).sum()
+                total += x.shape[0]
+
+
+        print('EP%d |train_loss=%.6f |test_loss=%.6f| train_ce=%.6f| train_bits=%.6f| test_ce=%.6f| test_bits=%.6f| acc=%.4f%'
+            %(ep, train_loss/args.bs_train, 5 * test_loss/args.bs_test, 
+            train_ce/args.bs_train, train_rate/args.bs_train,
+            5 * test_ce/args.bs_test, 5 * test_rate/args.bs_test, (100*correct)/total
+            ))
+
+        if (ep+1)%args.save_freq==0:
+            state = {'model': model.module.state_dict()} if isinstance(model, torch.nn.DataParallel) else {'model': model.state_dict()} 
+            path = args.save_dir + '%s_%s_%s_b%.3f_ep%d'%(args.arch, args.dataset, args.loss_type, args.beta, ep)+'.pkl'
+            torch.save(state, path)
+    toc = time()
+    print('Time Elapsed: %dmin' %((toc-tic)//60))
+
+
+if __name__ == '__main__':
+    root = '/home/lz2814_columbia_edu/'
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--dataset', type=str, default='cifar10')
+    parser.add_argument('--save_dir', type=str, default=root + '/pretrained_models/')
+    parser.add_argument('--pretrained', type=str, default=None, help='pretrained model path')
+    parser.add_argument('--arch', type=str, default='resnet18')
+
+    parser.add_argument('--loss_type', type=str, default='cont', help='cont, supcont, c_cont, c_supcont, ce, c_ce')
+    parser.add_argument('--beta', type=float, default=0.5, help='lagrangian multiplier')
+
+    parser.add_argument('--bs_train', type=int, default=256, help='training batchsize')
+    parser.add_argument('--bs_test', type=int, default=256, help='testing batchsize')
+    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
+    parser.add_argument('--lr', type=float, default=3e-4, help='learning rate')
+    parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
+    parser.add_argument('--save_freq', type=int, default=50, help='frequency of saving model')
+
+    args = parser.parse_args()
+    train(args)

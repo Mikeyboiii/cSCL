@@ -23,7 +23,7 @@ def train(args):
     model = simclr(z_dim=args.z_dim, arch=args.arch, compress=compress)
     model = torch.nn.DataParallel(model)
     if args.pretrained is not None:
-        model.load_state_dict(torch.load(args.pretrained)['model'])
+        model.module.load_state_dict(torch.load(args.pretrained)['model'])
 
     model.to(device)
     model.train()
@@ -97,7 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained', type=str, default=None, help='pretrained model path')
     parser.add_argument('--arch', type=str, default='resnet18')
 
-    parser.add_argument('--loss_type', type=str, default='cont', help='cont, supcont, c_cont, c_supcont')
+    parser.add_argument('--loss_type', type=str, default='cont', help='cont, supcont, c_cont, c_supcont, ce, c_ce')
     parser.add_argument('--temp', type=float, default=0.07, help='contrastive loss temperature')
     parser.add_argument('--beta', type=float, default=0.5, help='lagrangian multiplier')
     parser.add_argument('--compress_rep', type=str, default='h', help='compress h or z')

@@ -72,7 +72,7 @@ class cifar10_pair_data(torchvision.datasets.CIFAR10):
         return (img, img2), target#, index 
 
 
-def get_loader(dataset, split, normalize, bs, views=2, dl=False):
+def get_loader(dataset, split, normalize, bs, views=2, dl=False, augment=True):
     assert views==2 or views==1
     if dataset == 'cifar10':
         info = {'mean': (0.4914, 0.4822, 0.4465), 'std': (0.2471, 0.2435, 0.2616)}
@@ -82,7 +82,10 @@ def get_loader(dataset, split, normalize, bs, views=2, dl=False):
         else:
             set_class = torchvision.datasets.CIFAR10
         
-    trans = get_preprocess(dataset, split, views)
+    trans = []
+    
+    if augment:
+        trans += get_preprocess(dataset, split, views)
 
     if normalize: 
         trans.append(transforms.Normalize(info['mean'], info['std']))
