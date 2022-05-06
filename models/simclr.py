@@ -4,6 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 from torchvision.models import resnet50, resnet18
 from compressai.entropy_models import EntropyBottleneck, GaussianConditional
+from .entropy_model import HyperPrior, FactorizedPrior
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -36,9 +37,10 @@ class Projection(nn.Module):
         return F.normalize(x, dim=1)
 
 class simclr(nn.Module):
-    def __init__(self, z_dim=256, arch='resnet50', compress=False):
+    def __init__(self, z_dim=256, arch='resnet50', entropy_model='factorized'):
         super().__init__()
         assert arch in ['resnet50', 'resnet18']
+        assert entropy_model in ['factorized', 'hyperprior', None]
         if arch == 'resnet50':
             backbone = resnet50(pretrained=False)
             c_in = 2048
@@ -58,10 +60,13 @@ class simclr(nn.Module):
         )
         self.projector = Projection(c_in=c_in, c_out=z_dim)
 
-        if compress:
-            self.factorized_entropy = EntropyBottleneck(c_in)
+        if entropy_model == 'factorized':
+            self.entropy_model = FactorizedPrior(z_dim)
+        elif entropy_model == 'hyperprior':
+            self.entropy_model = HyperPrior(z_dim, 64)
+        else:
+            self.entropy_model = None
 
-        self.compress = compress
 
     def forward(self, x):
         
@@ -69,18 +74,19 @@ class simclr(nn.Module):
         h_hat = Quantize.apply(h)
         z = self.projector(h_hat)
 
-        if self.compress:
-            _, llh = self.factorized_entropy(h)
-            rate = torch.sum(-1.0*torch.log2(llh)) / (h.shape[0] * h.shape[1] * h.shape[2] * h.shape[3])
-        else:
-            rate = torch.tensor([0]).to(device)
+        rate = torch.tensor([0]).to(device)
+
+        if self.entropy_model is not None:
+            rate = self.entropy_model(h)
+
         return z, rate
         
 
 class c_resnet(nn.Module):
-    def __init__(self, num_classes=10, arch='resnet50', compress=False):
+    def __init__(self, num_classes=10, arch='resnet50', compress=False, entropy_model='factorized'):
         super().__init__()
         assert arch in ['resnet50', 'resnet18']
+        assert entropy_model in ['factorized', 'hyperprior', None]
         if arch == 'resnet50':
             backbone = resnet50(pretrained=False)
             c_in = 2048
@@ -100,10 +106,13 @@ class c_resnet(nn.Module):
         )
         self.fc = nn.Linear(c_in, num_classes)
 
-        if compress:
-            self.factorized_entropy = EntropyBottleneck(c_in)
+        if entropy_model == 'factorized':
+            self.entropy_model = FactorizedPrior(c_in)
+        elif entropy_model == 'hyperprior':
+            self.entropy_model = HyperPrior(c_in, 64)
+        else:
+            self.entropy_model = None
 
-        self.compress = compress
 
     def forward(self, x):
         
@@ -112,12 +121,11 @@ class c_resnet(nn.Module):
         out = torch.flatten(h_hat, 1)
         out = self.fc(out)
 
+        rate = torch.tensor([0]).to(device)
 
-        if self.compress:
-            _, llh = self.factorized_entropy(h)
-            rate = torch.sum(-1.0*torch.log2(llh)) / (h.shape[0] * h.shape[1] * h.shape[2] * h.shape[3])
-        else:
-            rate = torch.tensor([0]).to(device)
+        if self.entropy_model is not None:
+            rate = self.entropy_model(h)
+
         return out, rate
 
 

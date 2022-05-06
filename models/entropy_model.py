@@ -16,7 +16,6 @@ def conv(in_channels, out_channels, kernel_size=3, stride=2):
         padding=kernel_size // 2,
     )
 
-
 def deconv(in_channels, out_channels, kernel_size=3, stride=2):
     return nn.ConvTranspose2d(
         in_channels,
@@ -27,7 +26,7 @@ def deconv(in_channels, out_channels, kernel_size=3, stride=2):
         padding=kernel_size // 2,
     )
 
-class FactorizedCompressor(nn.Module):
+class FactorizedPrior(nn.Module):
     '''
     A Factorized entropy model for estimating the entropy of a representation
     '''
@@ -36,12 +35,11 @@ class FactorizedCompressor(nn.Module):
         self.factorized_entropy = EntropyBottleneck(z_dim)
         
     def forward(self, z):
-        
+        z_num = z.shape[0] * z.shape[1]
         z_hat, z_likelihoods = self.factorized_entropy(z)
+        rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
 
-        bpp = torch.sum(-1.0*torch.log2(z_likelihoods)) / (z.shape[0] * z.shape[1] * z.shape[2] * z.shape[3])
-
-        return bpp
+        return rate_z
 
 class HyperPrior(nn.Module):
   def __init__(self, N, M):
@@ -69,7 +67,7 @@ class HyperPrior(nn.Module):
     )
 
     self.factorized = EntropyBottleneck(M)
-    self.gaussian_conditional = GaussianConditional(N)
+    self.gaussian_conditional = GaussianConditional(None)
     self.N, self.M = N, M
   def forward(self, x):
     B= x.shape[0]
@@ -86,9 +84,9 @@ class HyperPrior(nn.Module):
     rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
 
     return rate_x + rate_z
-
 if __name__ == '__main__':
-    comp = Compressor(64, 128)
+    #comp = Compressor(64, 128)
+    hyper = HyperPrior()
     loader = get_loader()
     x_hat, rx, rz = comp(x)
 

@@ -16,11 +16,12 @@ def train(args):
     train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=2, bs=args.bs_train, dl=False)
     test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=2, bs=args.bs_test, dl=False)
 
-    compress = False
     if args.loss_type in ['c_cont', 'c_supcont']:
-        compress = True
+        ent_model = args.entropy_mode
+    else:
+        ent_model= None
 
-    model = simclr(z_dim=args.z_dim, arch=args.arch, compress=compress)
+    model = simclr(z_dim=args.z_dim, arch=args.arch, entropy_model=ent_model)
     model = torch.nn.DataParallel(model)
     if args.pretrained is not None:
         model.module.load_state_dict(torch.load(args.pretrained)['model'])
@@ -96,6 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default=root + '/pretrained_models/')
     parser.add_argument('--pretrained', type=str, default=None, help='pretrained model path')
     parser.add_argument('--arch', type=str, default='resnet18')
+    parser.add_argument('--entropy_model', type=str, default='hyperprior')
 
     parser.add_argument('--loss_type', type=str, default='cont', help='cont, supcont, c_cont, c_supcont, ce, c_ce')
     parser.add_argument('--temp', type=float, default=0.07, help='contrastive loss temperature')
