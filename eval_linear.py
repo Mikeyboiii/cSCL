@@ -168,6 +168,6 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=500, help='linear model epochs')
     args = parser.parse_args()
 
-    args.model_path = root + 'pretrained_models/resnet18_cifar10_cont_b0.500_t0.070_ep99.pkl'
+    args.model_path = root + 'pretrained_models/resnet18_cifar10_supcont_b0.500_t0.070_ep299.pkl'
     eval(args)
 

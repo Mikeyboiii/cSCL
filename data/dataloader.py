@@ -30,17 +30,22 @@ def get_preprocess(dataset, split, views):
     if dataset == 'cifar10':
         img_size = 32
 
-    if views==1: return [transforms.ToTensor()]
 
     if split == 'train':
-        preprocess = [
-            transforms.RandomResizedCrop(img_size),
-            transforms.RandomHorizontalFlip(),
-            get_color_distortion(),
-            get_gaussian_blur(img_size),
-            transforms.ToTensor(),
-        ]
-
+        if views > 1:
+            preprocess = [
+                transforms.RandomResizedCrop(img_size),
+                transforms.RandomHorizontalFlip(),
+                get_color_distortion(),
+                get_gaussian_blur(img_size),
+                transforms.ToTensor(),
+            ]
+        else:
+            preprocess = [
+                transforms.RandomCrop(img_size, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]   
     elif split == 'test':
         preprocess = [
             transforms.ToTensor(),
@@ -72,20 +77,19 @@ class cifar10_pair_data(torchvision.datasets.CIFAR10):
         return (img, img2), target#, index 
 
 
-def get_loader(dataset, split, normalize, bs, views=2, dl=False, augment=True):
+def get_loader(dataset, split, normalize, bs, views=2, dl=False):
     assert views==2 or views==1
     if dataset == 'cifar10':
-        info = {'mean': (0.4914, 0.4822, 0.4465), 'std': (0.2471, 0.2435, 0.2616)}
+        info = {'mean': [0.4914, 0.4822, 0.4465], 'std': [0.2471, 0.2435, 0.2616]}
         set_dir = root + '/data/cifar10/'
         if views==2:
             set_class = cifar10_pair_data
         else:
             set_class = torchvision.datasets.CIFAR10
         
-    trans = []
+    #trans = [transforms.ToTensor()]
+    trans = get_preprocess(dataset, split, views)
     
-    if augment:
-        trans += get_preprocess(dataset, split, views)
 
     if normalize: 
         trans.append(transforms.Normalize(info['mean'], info['std']))

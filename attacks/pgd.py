@@ -57,7 +57,7 @@ def PGD_attack(x, y, net, Loss, epsilon, steps, step_size, innormalize=lambda x:
 
     for i in range(steps):
         delta = Variable(delta.data, requires_grad=True)
-        preds = net(innormalize(x_adv+delta))
+        preds, _ = net(innormalize(x_adv+delta))
         cost = Loss(preds, y) 
         net.zero_grad()
         cost.backward()
