@@ -41,6 +41,7 @@ class FactorizedPrior(nn.Module):
 
         return rate_z
 
+'''
 class HyperPrior(nn.Module):
   def __init__(self, N, M):
     super().__init__()
@@ -83,7 +84,55 @@ class HyperPrior(nn.Module):
     rate_x =  (torch.sum(-1.0*torch.log2(x_llh)) / x_num)
     rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
 
+    #print(rate_x, rate_z, self.training)
+    print(x[0, :5], x_hat[0, :5], z[0, :5], z_hat[0, :5], self.training)
+
     return rate_x + rate_z
+'''
+class HyperPrior(nn.Module):
+  def __init__(self, N, M):
+    super().__init__()
+    self.hyper_encoder = nn.Sequential(
+        conv(N, M, stride=1, kernel_size=1),
+        nn.LeakyReLU(inplace=True),
+        conv(M, M, stride=1, kernel_size=1),
+        nn.LeakyReLU(inplace=True),
+        conv(M, M, stride=1, kernel_size=1),
+    )
+    self.gaussian_param = nn.Sequential(
+        conv(M, N, stride=1, kernel_size=1),
+        nn.LeakyReLU(inplace=True),
+        conv(N, N * 3//2, stride=1, kernel_size=1),
+        nn.LeakyReLU(inplace=True),
+        conv(N * 3//2, N * 2, stride=1, kernel_size=1),
+    )
+
+
+    self.factorized = EntropyBottleneck(M)
+    self.gaussian_conditional = GaussianConditional(None)
+    self.N, self.M = N, M
+  def forward(self, x):
+    B= x.shape[0]
+    x_num = B * self.N
+    z_num = B * self.M
+
+    z = self.hyper_encoder(x)
+    z_hat, z_llh = self.factorized(z)
+    gaus_param = self.gaussian_param(z_hat)
+
+    sigma, mu = gaus_param.chunk(2, 1)
+
+    x_hat, x_llh = self.gaussian_conditional(x, scales=sigma, means=mu)
+
+    rate_x =  (torch.sum(-1.0*torch.log2(x_llh)) / x_num)
+    rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
+
+    #print(rate_x, rate_z, self.training)
+    #print(x[0, :5], x_hat[0, :5], z[0, :5], z_hat[0, :5], self.training)
+
+    return rate_x + rate_z
+
+
 if __name__ == '__main__':
     #comp = Compressor(64, 128)
     hyper = HyperPrior()

@@ -17,7 +17,12 @@ def eval(args):
         mu, sigma =torch.tensor(info['mean']).view(1, 3, 1, 1).to(device), torch.tensor(info['std']).view(1, 3, 1, 1).to(device)
         return (x - mu) / sigma
 
-    model = c_resnet(num_classes=num_classes, arch=args.arch, compress=True)
+    if args.loss_type not in ['c_ce']:
+        ent_model= None
+    else:
+        ent_model = args.entropy_model
+
+    model = c_resnet(num_classes=num_classes, arch=args.arch, entropy_model=ent_model)
     model = torch.nn.DataParallel(model)
     model.module.load_state_dict(torch.load(args.pretrained)['model'])
     model.to(device)
@@ -55,7 +60,12 @@ def eval_adv(args):
         mu, sigma =torch.tensor(info['mean']).view(1, 3, 1, 1).to(device), torch.tensor(info['std']).view(1, 3, 1, 1).to(device)
         return (x - mu) / sigma
 
-    model = c_resnet(num_classes=num_classes, arch=args.arch, compress=True)
+    if args.loss_type not in ['c_ce']:
+        ent_model= None
+    else:
+        ent_model = args.entropy_model
+
+    model = c_resnet(num_classes=num_classes, arch=args.arch, entropy_model=ent_model)
     model = torch.nn.DataParallel(model)
     model.module.load_state_dict(torch.load(args.pretrained)['model'])
     model.to(device)
@@ -95,6 +105,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--pretrained', type=str, default=None, help='pretrained model path')
     parser.add_argument('--arch', type=str, default='resnet18')
+    parser.add_argument('--entropy_model', type=str, default=None)
 
     parser.add_argument('--loss_type', type=str, default='ce', help='ce, c_ce')
     parser.add_argument('--bs_test', type=int, default=2500, help='testing batchsize')
@@ -106,7 +117,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    args.pretrained = '/home/lz2814_columbia_edu/pretrained_models/resnet18_cifar10_c_ce_b32.000_ep329.pkl'
+    args.pretrained = '/home/lz2814_columbia_edu/pretrained_models/resnet18_cifar10_ce_b0.100_ep329.pkl'
 
 
     #eval(args)

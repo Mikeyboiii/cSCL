@@ -109,7 +109,7 @@ class c_resnet(nn.Module):
         if entropy_model == 'factorized':
             self.entropy_model = FactorizedPrior(c_in)
         elif entropy_model == 'hyperprior':
-            self.entropy_model = HyperPrior(c_in, 64)
+            self.entropy_model = HyperPrior(c_in, 256)
         else:
             self.entropy_model = None
 
