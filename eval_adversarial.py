@@ -23,6 +23,7 @@ def eval(args):
         ent_model = args.entropy_model
 
     model = c_resnet(num_classes=num_classes, arch=args.arch, entropy_model=ent_model)
+    #model = c_CNN()
     model = torch.nn.DataParallel(model)
     model.module.load_state_dict(torch.load(args.pretrained)['model'])
     model.to(device)
@@ -105,19 +106,19 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--pretrained', type=str, default=None, help='pretrained model path')
     parser.add_argument('--arch', type=str, default='resnet18')
-    parser.add_argument('--entropy_model', type=str, default=None)
+    parser.add_argument('--entropy_model', type=str, default='hyperprior')
 
     parser.add_argument('--loss_type', type=str, default='ce', help='ce, c_ce')
-    parser.add_argument('--bs_test', type=int, default=2500, help='testing batchsize')
+    parser.add_argument('--bs_test', type=int, default=5000, help='testing batchsize')
 
     parser.add_argument('--epsilon', type=float, default=8/255, help='pgd bound')
-    parser.add_argument('--steps', type=int, default=20, help='pgd steps')
+    parser.add_argument('--steps', type=int, default=7, help='pgd steps')
     parser.add_argument('--step_size', type=float, default=2/255, help='pgd step size')
 
 
     args = parser.parse_args()
 
-    args.pretrained = '/home/lz2814_columbia_edu/pretrained_models/resnet18_cifar10_ce_b0.100_ep329.pkl'
+    args.pretrained = '/home/lz2814_columbia_edu/lingyu/pretrained_models/resnet18_cifar10_ce_b0.100_ep329.pkl'
 
 
     #eval(args)

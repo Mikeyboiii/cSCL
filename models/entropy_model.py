@@ -36,57 +36,61 @@ class FactorizedPrior(nn.Module):
         
     def forward(self, z):
         z_num = z.shape[0] * z.shape[1]
-        z_hat, z_likelihoods = self.factorized_entropy(z)
+        z_hat, z_llh = self.factorized_entropy(z)
         rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
 
         return rate_z
 
-'''
+
 class HyperPrior(nn.Module):
   def __init__(self, N, M):
     super().__init__()
     self.hyper_encoder = nn.Sequential(
-        nn.Linear(N, N),
-        nn.LeakyReLU(inplace=True),
-        nn.Linear(N,N),
-        nn.LeakyReLU(inplace=True),
-        nn.Linear(N,M),
+        nn.Linear(N, M),
+        #nn.LeakyReLU(inplace=True),
+        #nn.Linear(N,N),
+        #nn.LeakyReLU(inplace=True),
+        #nn.Linear(N,M),
     )
     self.mean = nn.Sequential(
         nn.Linear(M, N),
         nn.LeakyReLU(inplace=True),
-        nn.Linear(N,N),
-        nn.LeakyReLU(inplace=True),
-        nn.Linear(N,N),
+        #nn.Linear(N,N),
+        #nn.LeakyReLU(inplace=True),
+        #nn.Linear(N,N),
+        #nn.LeakyReLU(inplace=True),
     )
     self.std = nn.Sequential(
         nn.Linear(M, N),
         nn.LeakyReLU(inplace=True),
-        nn.Linear(N,N),
-        nn.LeakyReLU(inplace=True),
-        nn.Linear(N,N),
+        #nn.Linear(N,N),
+        #nn.LeakyReLU(inplace=True),
+        #nn.Linear(N,N),
+        #nn.LeakyReLU(inplace=True),
     )
 
     self.factorized = EntropyBottleneck(M)
     self.gaussian_conditional = GaussianConditional(None)
     self.N, self.M = N, M
+
   def forward(self, x):
     B= x.shape[0]
     x_num = B * self.N
     z_num = B * self.M
 
-    z = self.hyper_encoder(x.squeeze(2).squeeze(2))
+    z = self.hyper_encoder(x.flatten(1))
     z_hat, z_llh = self.factorized(z.unsqueeze(2).unsqueeze(2))
-    mu = self.mean(z_hat.squeeze(2).squeeze(2)).unsqueeze(2).unsqueeze(2)
-    sigma = self.std(z_hat.squeeze(2).squeeze(2)).unsqueeze(2).unsqueeze(2)
+    mu = self.mean(z_hat.flatten(1)).unsqueeze(2).unsqueeze(2)
+    sigma = self.std(z_hat.flatten(1)).unsqueeze(2).unsqueeze(2)
     x_hat, x_llh = self.gaussian_conditional(x, scales=sigma, means=mu)
 
     rate_x =  (torch.sum(-1.0*torch.log2(x_llh)) / x_num)
     rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
 
     #print(rate_x, rate_z, self.training)
-    print(x[0, :5], x_hat[0, :5], z[0, :5], z_hat[0, :5], self.training)
-
+    #print(x[0, :5], x_hat[0, :5], z[0, :5], z_hat[0, :5], self.training)
+    #print(rate_x.item(), rate_z.item())
+    #print(self.training, z_hat[0, :5], mu[0, :5])
     return rate_x + rate_z
 '''
 class HyperPrior(nn.Module):
@@ -132,7 +136,7 @@ class HyperPrior(nn.Module):
 
     return rate_x + rate_z
 
-
+'''
 if __name__ == '__main__':
     #comp = Compressor(64, 128)
     hyper = HyperPrior()

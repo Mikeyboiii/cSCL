@@ -4,7 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 from torchvision.models import resnet50, resnet18
 from compressai.entropy_models import EntropyBottleneck, GaussianConditional
-from .entropy_model import HyperPrior, FactorizedPrior
+from .entropy_model import HyperPrior, FactorizedPrior, conv, deconv
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -109,24 +109,100 @@ class c_resnet(nn.Module):
         if entropy_model == 'factorized':
             self.entropy_model = FactorizedPrior(c_in)
         elif entropy_model == 'hyperprior':
-            self.entropy_model = HyperPrior(c_in, 256)
+            self.entropy_model = HyperPrior(c_in, c_in * 2)
         else:
             self.entropy_model = None
+
+        self.round = Quantize.apply
 
 
     def forward(self, x):
         
         h = self.encoder(x)
-        h_hat = Quantize.apply(h)
+        h_hat  = self.round(h)
+
         out = torch.flatten(h_hat, 1)
         out = self.fc(out)
 
         rate = torch.tensor([0]).to(device)
 
         if self.entropy_model is not None:
-            rate = self.entropy_model(h)
+            rate = self.entropy_model(h_hat)
 
         return out, rate
+
+
+class c_CNN(nn.Module):
+    def __init__(self, N=64, M=96, num_classes=10):
+        super().__init__()
+        #assert entropy_model in ['factorized', 'hyperprior', None]
+
+        self.encoder = nn.Sequential(
+            conv(3, N),
+            nn.BatchNorm2d(N),
+            nn.ReLU(),
+            conv(N, N),
+            nn.BatchNorm2d(N),
+            nn.ReLU(),
+            conv(N, N),
+            #nn.BatchNorm2d(N),
+            #nn.ReLU(),
+            #conv(N, N),
+        )
+
+        self.hyper_encoder = nn.Sequential(
+            conv(N, M, stride=1, kernel_size=3),
+            nn.LeakyReLU(inplace=True),
+            conv(M, M),
+            nn.LeakyReLU(inplace=True),
+            conv(M, M),
+        )
+
+        self.hyper_decoder = nn.Sequential(
+            deconv(M, N),
+            nn.LeakyReLU(inplace=True),
+            deconv(N, N * 3 // 2),
+            nn.LeakyReLU(inplace=True),
+            conv(N * 3 // 2, N * 2, stride=1, kernel_size=3),
+        )
+
+
+        self.factorized_entropy = EntropyBottleneck(M)
+        self.gaussian_conditional = GaussianConditional(None)
+
+        self.round = Quantize.apply
+        self.fc = nn.Linear(1024, num_classes)
+
+
+    def forward(self, x):
+
+        y = self.encoder(x)
+        z = self.hyper_encoder(y)
+        y_num = y.shape[0] * y.shape[1] * y.shape[2] * y.shape[3]
+        z_num = z.shape[0] * z.shape[1] * z.shape[2] * z.shape[3]
+
+
+        z_hat, z_llh = self.factorized_entropy(z)
+        gaussian_params = self.hyper_decoder(z_hat)
+
+        scales_hat, means_hat = gaussian_params.chunk(2, 1)
+        _, y_llh = self.gaussian_conditional(y, scales_hat, means=means_hat)
+
+        y_hat  = self.round(y)
+
+        out = torch.flatten(y_hat, 1)
+        out = self.fc(out)
+
+        rate_y =  (torch.sum(-1.0*torch.log2(y_llh)) / y_num)
+        rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
+
+        #rate = torch.tensor([0]).to(device)
+
+        #if self.entropy_model is not None:
+        #    rate = self.entropy_model(h_hat)
+
+        return out, rate_y + rate_z
+
 
 
 if __name__ == '__main__':

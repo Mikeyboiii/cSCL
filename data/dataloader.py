@@ -5,7 +5,7 @@ import torchvision
 from torchvision import transforms
 from PIL import Image
 
-root = '/home/lz2814_columbia_edu/'
+root = '/home/lz2814_columbia_edu/lingyu'
 
 def get_color_distortion(s=1.0):
     # s is the strength of color distortion.

@@ -2,7 +2,7 @@ import torch
 import argparse
 from time import time
 from data.dataloader import get_loader
-from models.simclr import c_resnet
+from models.simclr import c_resnet, c_CNN
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -23,6 +23,7 @@ def train(args):
     test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=1, bs=args.bs_test, dl=True)
 
     model = c_resnet(num_classes=num_classes, arch=args.arch, entropy_model=ent_model)
+    #model = c_CNN()
     model = torch.nn.DataParallel(model)
     if args.pretrained is not None:
         model.module.load_state_dict(torch.load(args.pretrained)['model'])
@@ -32,6 +33,7 @@ def train(args):
     
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
+    #optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
     tic = time()
@@ -48,7 +50,10 @@ def train(args):
             ce = criterion(logits, labels)
             preds = torch.argmax(logits, 1)
 
-            loss = ce + args.beta * rate
+            if ep < 5:
+                loss = ce
+            else:
+                loss = ce + args.beta * rate
             train_loss += loss.item()
             train_ce += ce.item()
             train_rate += rate.item()
@@ -72,7 +77,11 @@ def train(args):
                 ce = criterion(logits, labels)
                 preds = torch.argmax(logits, 1)
 
-                loss = ce + args.beta * rate
+                if ep < 5:
+                    loss = ce
+                else:
+                    loss = ce + args.beta * rate
+
                 test_loss += loss.item()
                 test_ce += ce.item()
                 test_rate += rate.item()
@@ -82,7 +91,7 @@ def train(args):
 
         scheduler.step()
 
-        print('EP%d |train_loss=%.6f |test_loss=%.6f| train_ce=%.6f| train_bits=%.6f| test_ce=%.6f| test_bits=%.6f| train_acc=%.2f |test_acc=%.2f'
+        print('EP%d |train_loss=%.4f |test_loss=%.4f| train_ce=%.4f| train_bits=%.4f| test_ce=%.4f| test_bits=%.4f| train_acc=%.2f |test_acc=%.2f'
             %(ep, train_loss/args.bs_train, 5 * test_loss/args.bs_test, 
             train_ce/args.bs_train, train_rate/args.bs_train,
             5 * test_ce/args.bs_test, 5 * test_rate/args.bs_test, (100*train_correct)/train_total ,(100*correct)/total
@@ -97,7 +106,7 @@ def train(args):
 
 
 if __name__ == '__main__':
-    root = '/home/lz2814_columbia_edu/'
+    root = '/home/lz2814_columbia_edu/lingyu'
 
     parser = argparse.ArgumentParser()
 
@@ -112,11 +121,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--bs_train', type=int, default=128, help='training batchsize')
     parser.add_argument('--bs_test', type=int, default=128, help='testing batchsize')
-    parser.add_argument('--epochs', type=int, default=330, help='number of epochs')
+    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
     parser.add_argument('--lr', type=float, default=5e-3, help='learning rate')
     parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
 
-    parser.add_argument('--save_freq', type=int, default=110, help='frequency of saving model')
+    parser.add_argument('--save_freq', type=int, default=100, help='frequency of saving model')
 
     args = parser.parse_args()
     train(args)
