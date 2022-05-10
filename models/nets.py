@@ -37,7 +37,7 @@ class Projection(nn.Module):
         return F.normalize(x, dim=1)
 
 class simclr(nn.Module):
-    def __init__(self, z_dim=256, arch='resnet50', entropy_model='factorized'):
+    def __init__(self, z_dim=256, arch='resnet50', entropy_model='hyperprior'):
         super().__init__()
         assert arch in ['resnet50', 'resnet18']
         assert entropy_model in ['factorized', 'hyperprior', None]
@@ -61,17 +61,19 @@ class simclr(nn.Module):
         self.projector = Projection(c_in=c_in, c_out=z_dim)
 
         if entropy_model == 'factorized':
-            self.entropy_model = FactorizedPrior(z_dim)
+            self.entropy_model = FactorizedPrior(c_in)
         elif entropy_model == 'hyperprior':
-            self.entropy_model = HyperPrior(z_dim, 64)
+            self.entropy_model = HyperPrior(c_in, c_in * 2)
         else:
             self.entropy_model = None
+
+        self.round = Quantize.apply
 
 
     def forward(self, x):
         
         h = self.encoder(x)
-        h_hat = Quantize.apply(h)
+        h_hat = self.round(h)
         z = self.projector(h_hat)
 
         rate = torch.tensor([0]).to(device)
@@ -83,7 +85,7 @@ class simclr(nn.Module):
         
 
 class c_resnet(nn.Module):
-    def __init__(self, num_classes=10, arch='resnet50', compress=False, entropy_model='factorized'):
+    def __init__(self, num_classes=10, arch='resnet50', entropy_model='hyperprior'):
         super().__init__()
         assert arch in ['resnet50', 'resnet18']
         assert entropy_model in ['factorized', 'hyperprior', None]
@@ -129,79 +131,82 @@ class c_resnet(nn.Module):
         if self.entropy_model is not None:
             rate = self.entropy_model(h_hat)
 
+
         return out, rate
 
 
-class c_CNN(nn.Module):
-    def __init__(self, N=64, M=96, num_classes=10):
+class c_resnet_mid(nn.Module):
+    def __init__(self, num_classes=10, arch='resnet50', entropy_model='hyperprior'):
         super().__init__()
-        #assert entropy_model in ['factorized', 'hyperprior', None]
-
+        assert arch in ['resnet50', 'resnet18']
+        assert entropy_model in ['factorized', 'hyperprior', None]
+        if arch == 'resnet50':
+            backbone = resnet50(pretrained=False)
+            c_in = 2048
+        elif arch == 'resnet18':
+            backbone = resnet18(pretrained=False)
+            c_in = 512
         self.encoder = nn.Sequential(
-            conv(3, N),
-            nn.BatchNorm2d(N),
-            nn.ReLU(),
-            conv(N, N),
-            nn.BatchNorm2d(N),
-            nn.ReLU(),
-            conv(N, N),
-            #nn.BatchNorm2d(N),
-            #nn.ReLU(),
-            #conv(N, N),
+            backbone.conv1,
+            backbone.bn1,
+            backbone.relu,
+            backbone.maxpool,
+            backbone.layer1,
+        )
+        self.decoder = nn.Sequential(
+            backbone.layer2,
+            backbone.layer3,
+            backbone.layer4,
+            backbone.avgpool,
         )
 
-        self.hyper_encoder = nn.Sequential(
-            conv(N, M, stride=1, kernel_size=3),
+        self.h_e = nn.Sequential(
+            conv(64, 96, stride=1, kernel_size=3),
             nn.LeakyReLU(inplace=True),
-            conv(M, M),
+            conv(96, 96),
             nn.LeakyReLU(inplace=True),
-            conv(M, M),
+            conv(96, 96),
         )
 
-        self.hyper_decoder = nn.Sequential(
-            deconv(M, N),
+        self.h_d = nn.Sequential(
+            deconv(96, 64),
             nn.LeakyReLU(inplace=True),
-            deconv(N, N * 3 // 2),
+            deconv(64, 96),
             nn.LeakyReLU(inplace=True),
-            conv(N * 3 // 2, N * 2, stride=1, kernel_size=3),
+            deconv(96, 128, stride=1, kernel_size=3),
         )
 
 
-        self.factorized_entropy = EntropyBottleneck(M)
-        self.gaussian_conditional = GaussianConditional(None)
-
+        self.fc = nn.Linear(c_in, num_classes)
         self.round = Quantize.apply
-        self.fc = nn.Linear(1024, num_classes)
+
+        self.factorized = EntropyBottleneck(96)
+        self.gaussian_conditional = GaussianConditional(None)
 
 
     def forward(self, x):
+        
+        h = self.encoder(x)
+        z = self.h_e(h)
 
-        y = self.encoder(x)
-        z = self.hyper_encoder(y)
-        y_num = y.shape[0] * y.shape[1] * y.shape[2] * y.shape[3]
+        h_num = h.shape[0] * h.shape[1] * h.shape[2] * h.shape[3]
         z_num = z.shape[0] * z.shape[1] * z.shape[2] * z.shape[3]
 
-
-        z_hat, z_llh = self.factorized_entropy(z)
-        gaussian_params = self.hyper_decoder(z_hat)
-
+        z_hat, z_llh = self.factorized(z)
+        gaussian_params = self.h_d(z_hat)
         scales_hat, means_hat = gaussian_params.chunk(2, 1)
-        _, y_llh = self.gaussian_conditional(y, scales_hat, means=means_hat)
+        _, h_llh = self.gaussian_conditional(h, scales_hat, means=means_hat)
+        
+        h_hat = self.round(h)
+        out = self.decoder(h_hat)
+        out = torch.flatten(out, 1)
 
-        y_hat  = self.round(y)
-
-        out = torch.flatten(y_hat, 1)
         out = self.fc(out)
 
-        rate_y =  (torch.sum(-1.0*torch.log2(y_llh)) / y_num)
+        rate_h =  (torch.sum(-1.0*torch.log2(h_llh)) / h_num)
         rate_z =  (torch.sum(-1.0*torch.log2(z_llh)) / z_num)
 
-        #rate = torch.tensor([0]).to(device)
-
-        #if self.entropy_model is not None:
-        #    rate = self.entropy_model(h_hat)
-
-        return out, rate_y + rate_z
+        return out, rate_h + rate_z, h_hat
 
 
 
@@ -213,7 +218,8 @@ if __name__ == '__main__':
     #print(zx.shape, zy.shape)
 
 
-    print(encoder(x).shape)
+    model = c_resnet(num_classes=10, arch='resnet18', entropy_model='hyperprior')
+    print(model.encoder[7][1].conv2)
     #loss = nt_xent_loss(zx, zy, 0.1, eps=1e-6)
 
     #print(loss)

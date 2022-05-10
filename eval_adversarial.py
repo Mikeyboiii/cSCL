@@ -2,7 +2,7 @@ import torch
 import argparse
 from time import time
 from data.dataloader import get_loader
-from models.simclr import c_resnet
+from models.nets import c_resnet
 from attacks.pgd import PGD_attack
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -87,8 +87,10 @@ def eval_adv(args):
         adv = PGD_attack(x, labels, model, Loss, args.epsilon, args.steps, args.step_size, innormalize=normalize)
 
         with torch.inference_mode():
-            logits, rate = model(normalize(x + adv))
+            h_hat, logits, rate = model(normalize(x + adv))
+        print(torch.count_nonzero(h_hat)/ h_hat.shape[0])
         preds = torch.argmax(logits, 1)
+
 
         test_rate += rate.item()
 
@@ -108,17 +110,17 @@ if __name__ == '__main__':
     parser.add_argument('--arch', type=str, default='resnet18')
     parser.add_argument('--entropy_model', type=str, default='hyperprior')
 
-    parser.add_argument('--loss_type', type=str, default='ce', help='ce, c_ce')
+    parser.add_argument('--loss_type', type=str, default='c_ce', help='ce, c_ce')
     parser.add_argument('--bs_test', type=int, default=5000, help='testing batchsize')
 
     parser.add_argument('--epsilon', type=float, default=8/255, help='pgd bound')
-    parser.add_argument('--steps', type=int, default=7, help='pgd steps')
+    parser.add_argument('--steps', type=int, default=0, help='pgd steps')
     parser.add_argument('--step_size', type=float, default=2/255, help='pgd step size')
 
 
     args = parser.parse_args()
 
-    args.pretrained = '/home/lz2814_columbia_edu/lingyu/pretrained_models/resnet18_cifar10_ce_b0.100_ep329.pkl'
+    args.pretrained = '/home/lz2814_columbia_edu/lingyu/pretrained_models/resnet18_cifar10_c_ce_b64.000_ep99.pkl'
 
 
     #eval(args)

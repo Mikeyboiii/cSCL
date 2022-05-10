@@ -2,7 +2,7 @@ import torch
 import argparse
 from time import time
 from data.dataloader import get_loader
-from models.simclr import simclr
+from models.nets import simclr
 from losses import SupConLoss
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -13,13 +13,13 @@ def train(args):
     ))
     assert args.dataset in ['cifar10']
 
-    train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=2, bs=args.bs_train, dl=False)
-    test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=2, bs=args.bs_test, dl=False)
-
     if args.loss_type in ['c_cont', 'c_supcont']:
-        ent_model = args.entropy_mode
+        ent_model = args.entropy_model
     else:
         ent_model= None
+
+    train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=2, bs=args.bs_train, dl=True)
+    test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=2, bs=args.bs_test, dl=True)
 
     model = simclr(z_dim=args.z_dim, arch=args.arch, entropy_model=ent_model)
     model = torch.nn.DataParallel(model)
@@ -31,6 +31,7 @@ def train(args):
     
     criterion = SupConLoss(temperature=args.temp)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [400])
 
     tic = time()
 
@@ -38,6 +39,7 @@ def train(args):
         train_loss, test_loss, train_cont, train_rate, test_cont, test_rate = 0, 0, 0, 0, 0, 0
         for iter, (imgs, labels) in enumerate(train_loader):
             model.train()
+
 
             z, rate = model(torch.cat(imgs, dim=0).to(device))
             z1, z2 = z.chunk(2, dim=0)
@@ -47,7 +49,12 @@ def train(args):
                 cont = criterion(batch)
             else:
                 cont = criterion(batch, labels)
-            loss = cont + args.beta * rate
+
+            if ep < 200:
+                loss = cont
+            else:
+                loss = cont + args.beta * rate
+            #loss = cont + args.beta * rate
             train_loss += loss.item()
             train_cont += cont.item()
             train_rate += rate.item()
@@ -84,12 +91,14 @@ def train(args):
             state = {'model': model.module.state_dict()} if isinstance(model, torch.nn.DataParallel) else {'model': model.state_dict()} 
             path = args.save_dir + '%s_%s_%s_b%.3f_t%.3f_ep%d'%(args.arch, args.dataset, args.loss_type, args.beta, args.temp, ep)+'.pkl'
             torch.save(state, path)
+            
+        scheduler.step()
     toc = time()
     print('Time Elapsed: %dmin' %((toc-tic)//60))
 
 
 if __name__ == '__main__':
-    root = '/home/lz2814_columbia_edu/'
+    root = '/home/lz2814_columbia_edu/lingyu'
 
     parser = argparse.ArgumentParser()
 
@@ -108,10 +117,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--bs_train', type=int, default=256, help='training batchsize')
     parser.add_argument('--bs_test', type=int, default=256, help='testing batchsize')
-    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
+    parser.add_argument('--epochs', type=int, default=500, help='number of epochs')
     parser.add_argument('--lr', type=float, default=3e-4, help='learning rate')
     parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
-    parser.add_argument('--save_freq', type=int, default=50, help='frequency of saving model')
+    parser.add_argument('--save_freq', type=int, default=100, help='frequency of saving model')
 
     args = parser.parse_args()
     train(args)

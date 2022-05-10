@@ -2,7 +2,7 @@ import torch
 import argparse
 from time import time
 from data.dataloader import get_loader
-from models.simclr import c_resnet, c_CNN
+from models.nets import c_resnet, c_resnet_mid
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -22,8 +22,8 @@ def train(args):
     train_loader, _ = get_loader(args.dataset, 'train', normalize=True, views=1, bs=args.bs_train, dl=True)
     test_loader, _ = get_loader(args.dataset, 'test', normalize=True, views=1, bs=args.bs_test, dl=True)
 
-    model = c_resnet(num_classes=num_classes, arch=args.arch, entropy_model=ent_model)
-    #model = c_CNN()
+    #model = c_resnet(num_classes=num_classes, arch=args.arch, entropy_model=ent_model)
+    model = c_resnet_mid(num_classes=num_classes, arch=args.arch, entropy_model=ent_model)
     model = torch.nn.DataParallel(model)
     if args.pretrained is not None:
         model.module.load_state_dict(torch.load(args.pretrained)['model'])
@@ -99,7 +99,7 @@ def train(args):
 
         if (ep+1)%args.save_freq==0:
             state = {'model': model.module.state_dict()} if isinstance(model, torch.nn.DataParallel) else {'model': model.state_dict()} 
-            path = args.save_dir + '%s_%s_%s_b%.3f_ep%d'%(args.arch, args.dataset, args.loss_type, args.beta, ep)+'.pkl'
+            path = args.save_dir + 'mid%s_%s_%s_b%.3f_ep%d'%(args.arch, args.dataset, args.loss_type, args.beta, ep)+'.pkl'
             torch.save(state, path)
     toc = time()
     print('Time Elapsed: %dmin' %((toc-tic)//60))
