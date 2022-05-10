@@ -1,2 +1,2 @@
 # cSCL
-Compressive Supervised Contrastive Learning
+Entropy Constrained Compressive Representation Learning
