@@ -1,12 +1,14 @@
+# Use an image compressor to pretrain entropy model
 import torch
-from torch.nn import nn
+import torch.nn as nn
 from models.nets import AE_fc
 from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
+import argparse
 
 root = '~/cSCL'
 train_set = MNIST(root = root + '/data/mnist', train = True, transform=ToTensor(), download=True)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=4, shuffle=True)
+loader = torch.utils.data.DataLoader(train_set, batch_size=4, shuffle=True)
 
 
 def train(args):
@@ -16,73 +18,34 @@ def train(args):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     for ep in range(args.epochs):
-        train_loss, val_loss, train_D, train_R, val_D, val_R = 0, 0, 0, 0, 0, 0
+        train_loss, train_D, train_R = 0, 0, 0
 
         for iter, (x, _) in enumerate(loader):
             model.train()
             x = (2 * x - 1).cuda()
 
-            x_hat, rate = model(x)
-            ce = criterion(logits, y)
-            preds = torch.argmax(logits, 1)
+            x_hat, R = model(x)
+            D = criterion(x_hat, x)
 
-            if ep < 0 or beta==0:
-                loss = ce
-            else:
-                loss = ce + beta * rate
+            loss = D + args.beta * R
 
             train_loss += loss.item()
-            train_ce += ce.item()
-            train_rate += rate.item()
-
-            train_correct += (preds==y).sum()
-            train_total += x.shape[0]
+            train_D += D.item()
+            train_R += R.item()
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    ema(name, param.data)
+        print('EP%d |train_loss=%.2f |train_D=%.2f| train_R=%.4f' %(ep, train_loss, train_D/len(loader), train_R/len(loader))) 
+        if (ep+1)%args.save_freq == 0:
+            encoder_state = {'model': model.encoder.state_dict()}
+            encoder_path = args.save_dir + 'Encoder_b%.3f_ep%d'%(args.beta, ep)+'.pkl'
+            torch.save(encoder_state, encoder_path)
 
-        with torch.no_grad():
-            correct, total = 0, 0
-            
-            if beta==0:
-                model_avg =  MLP(ent_model=None).cuda()
-            else:
-                model_avg =  MLP(ent_model='factorized').cuda()
-            for name, param in model_avg.named_parameters():
-                if param.requires_grad:
-                    param.data = ema.shadow[name]
-
-            for iter, (x, y) in enumerate(loader2):
-                model.eval()
-                x = (2 * x - 1).cuda()
-                y = y.cuda()
-
-                logits, rate = model_avg(x)
-                ce = criterion(logits, y)
-                preds = torch.argmax(logits, 1)
-
-                if ep < 0 or beta==0:
-                    loss = ce
-                else:
-                    loss = ce + beta * rate
-
-                val_loss += loss.item()
-                val_ce += ce.item()
-                val_rate += rate.item()
-
-                correct += (preds==y).sum()
-                total += x.shape[0]
-
-        scheduler.step()
-
-        if (ep+1)%1==0:
-            print('EP%d |train_loss=%.2f |val_loss=%.2f| train_ce=%.2f| train_bits=%.4f| val_ce=%.2f| val_bits=%.4f| train_acc=%.2f |val_acc=%.2f| Error=%.2f' %(ep, train_loss, 5 * val_loss, train_ce, train_rate/len(loader),
-            5 * val_ce,  val_rate /len(loader2), (100*train_correct)/train_total ,(100*correct)/total, 100-(100*correct)/total)) 
+            entropy_state = {'model': model.entropy_model.state_dict()}
+            entropy_path = args.save_dir + 'Factorized_b%.3f_ep%d'%(args.beta, ep)+'.pkl'
+            torch.save(entropy_state, entropy_path)
 
 if __name__ == '__main__':
     root = '~'

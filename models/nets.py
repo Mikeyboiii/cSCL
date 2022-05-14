@@ -259,6 +259,7 @@ class MLP(nn.Module):
 
 class AE_fc(nn.Module):
     def __init__(self):
+        super().__init__()
         self.encoder = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(784, 1024),
@@ -277,12 +278,12 @@ class AE_fc(nn.Module):
         self.entropy_model = FactorizedPrior(256)
         self.round = Quantize.apply
 
-    def forward(sellf, x):
+    def forward(self, x):
         y = self.encoder(x)
         y_hat  = self.round(y)
-        x_hat = self.decoder(y_hat)
+        x_hat = self.decoder(y_hat).reshape(-1, 1, 28, 28)
 
-        rate = self.entropy_model(y_hat))
+        rate = self.entropy_model(y_hat)
 
         return x_hat, rate
 
