@@ -7,7 +7,7 @@ import torchvision.transforms as transforms
 import numpy as np
 
 from data.dataloader import get_loader
-from models.simclr import simclr
+from models.nets import simclr
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -115,11 +115,13 @@ def eval(args):
 
     n_features = 2048 if args.arch=='resnet50' else 512
 
-    compress = False
-    if args.loss_type in ['c_cont', 'c_supcont']:
-        compress = True
 
-    simclr_model = simclr(z_dim=args.z_dim, arch=args.arch, compress=compress)
+    if args.loss_type in ['c_cont', 'c_supcont']:
+        ent_model = 'hyperprior'
+    else:
+        ent_model = None
+
+    simclr_model = simclr(z_dim=args.z_dim, arch=args.arch, entropy_model=ent_model)
     simclr_model.load_state_dict(torch.load(args.model_path)['model'])
     simclr_model.to(device)
 
@@ -151,7 +153,7 @@ def eval(args):
     
 if __name__ == "__main__":
 
-    root = '/home/lz2814_columbia_edu/'
+    root = '/home/lz2814_columbia_edu/lingyu/'
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--dataset', type=str, default='cifar10')
@@ -168,6 +170,7 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=500, help='linear model epochs')
     args = parser.parse_args()
 
-    args.model_path = root + 'pretrained_models/resnet18_cifar10_supcont_b0.500_t0.070_ep299.pkl'
+    #args.model_path = root + 'pretrained_models/resnet18_cifar10_c_cont_b0.500_t0.070_ep299.pkl'
+    args.model_path = root + 'pretrained_models/resnet18_cifar10_c_cont_b0.100_t0.070_ep399.pkl'
     eval(args)
 

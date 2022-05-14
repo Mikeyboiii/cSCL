@@ -122,5 +122,10 @@ if __name__ == '__main__':
     parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
     parser.add_argument('--save_freq', type=int, default=100, help='frequency of saving model')
 
+
     args = parser.parse_args()
+
+
+    args.pretrained = '/home/lz2814_columbia_edu/lingyu/pretrained_models/resnet18_cifar10_supcont_b0.500_t0.070_ep299.pkl'
+
     train(args)
