@@ -38,6 +38,9 @@ def train(beta, final=False):
     else: 
         model = MLP(ent_model='factorized').cuda()
 
+    model.encoder.load_state_dict(torch.load('Encoder_b0.5_ep10.pkl')['model'])
+    model.entropy_model.load_state_dict(torch.load('Factorized_b0.5_ep10.pkl')['model'])
+
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.5, 0.999))
     #optimizer = torch.optim.SGD(model.parameters(), lr=0.05)

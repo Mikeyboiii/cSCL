@@ -37,7 +37,7 @@ def train(args):
             loss.backward()
             optimizer.step()
 
-        print('EP%d |train_loss=%.2f |train_D=%.2f| train_R=%.4f' %(ep, train_loss, train_D/len(loader), train_R/len(loader))) 
+        print('EP%d |train_loss=%.4f |train_D=%.4f| train_R=%.4f' %(ep, train_loss/len(loader), train_D/len(loader), train_R/len(loader))) 
         if (ep+1)%args.save_freq == 0:
             encoder_state = {'model': model.encoder.state_dict()}
             encoder_path = args.save_dir + 'Encoder_b%.3f_ep%d'%(args.beta, ep)+'.pkl'
@@ -48,7 +48,7 @@ def train(args):
             torch.save(entropy_state, entropy_path)
 
 if __name__ == '__main__':
-    root = '~'
+    root = '/root/cSCL'
 
     parser = argparse.ArgumentParser()
 
@@ -56,8 +56,8 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained', type=str, default=None, help='pretrained model path')
     parser.add_argument('--beta', type=float, default=0.5, help='lagrangian multiplier')
     parser.add_argument('--epochs', type=int, default=500, help='number of epochs')
-    parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
-    parser.add_argument('--save_freq', type=int, default=100, help='frequency of saving model')
+    parser.add_argument('--lr', type=float, default=3e-5, help='learning rate')
+    parser.add_argument('--save_freq', type=int, default=20, help='frequency of saving model')
 
 
     args = parser.parse_args()
