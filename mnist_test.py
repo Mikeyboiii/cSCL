@@ -4,7 +4,7 @@ from torchvision.transforms import ToTensor
 from torchvision.datasets import MNIST
 from models.nets import MLP
 
-root = '~/cSCL'
+root = '/root/cSCL'
 
 train_val = MNIST(root = root + '/data/mnist', train = True, transform=ToTensor(), download=True)
 train_set, val_set = torch.utils.data.random_split(train_val, [50000, 10000])
@@ -38,8 +38,8 @@ def train(beta, final=False):
     else: 
         model = MLP(ent_model='factorized').cuda()
 
-    model.encoder.load_state_dict(torch.load('Encoder_b0.5_ep10.pkl')['model'])
-    model.entropy_model.load_state_dict(torch.load('Factorized_b0.5_ep10.pkl')['model'])
+    model.encoder.load_state_dict(torch.load(root + '/pretrained_models/Encoder_b2.000_ep39.pkl')['model'])
+    model.entropy_model.load_state_dict(torch.load('pretrained_models/Factorized_b2.000_ep39.pkl')['model'])
 
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.5, 0.999))
@@ -125,7 +125,7 @@ def train(beta, final=False):
 
         scheduler.step()
 
-        if (ep+1)%1==0:
+        if (ep+1)%10==0:
             print('EP%d |train_loss=%.2f |val_loss=%.2f| train_ce=%.2f| train_bits=%.4f| val_ce=%.2f| val_bits=%.4f| train_acc=%.2f |val_acc=%.2f| Error=%.2f' %(ep, train_loss, 5 * val_loss, train_ce, train_rate/len(loader),
             5 * val_ce,  val_rate /len(loader2), (100*train_correct)/train_total ,(100*correct)/total, 100-(100*correct)/total)) 
             
@@ -135,7 +135,7 @@ final = False
 #for beta in [0]:
 #for beta in [1, 1e-1, 1e-2]:
 #for beta in [1e-3, 1e-4, 1e-5]:
-for beta in [1e-2]:
+for beta in [1e-4, 1e-3, 1e-2, 1e-1]:
 
     print('Beta =', beta, '| final =', final)
     train(beta=beta, final=final)
