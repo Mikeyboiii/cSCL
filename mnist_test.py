@@ -40,7 +40,7 @@ def train(beta, final=False):
         model = MLP(ent_model='hyperprior').cuda()
 
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, betas=(0.5, 0.999))
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.5, 0.999))
     #optimizer = torch.optim.SGD(model.parameters(), lr=0.05)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 2, gamma=0.97)
 
