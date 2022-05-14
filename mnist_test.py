@@ -4,7 +4,7 @@ from torchvision.transforms import ToTensor
 from torchvision.datasets import MNIST
 from models.nets import MLP
 
-root = '/home/lz2814_columbia_edu/lingyu/cSCL'
+root = '~/cSCL'
 
 train_val = MNIST(root = root + '/data/mnist', train = True, transform=ToTensor(), download=True)
 train_set, val_set = torch.utils.data.random_split(train_val, [50000, 10000])
@@ -32,12 +32,11 @@ class EMA(nn.Module):
         return new_average
 
 
-
 def train(beta, final=False):
     if beta==0:
         model = MLP(ent_model=None).cuda()
     else: 
-        model = MLP(ent_model='hyperprior').cuda()
+        model = MLP(ent_model='factorized').cuda()
 
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.5, 0.999))
@@ -95,7 +94,7 @@ def train(beta, final=False):
             if beta==0:
                 model_avg =  MLP(ent_model=None).cuda()
             else:
-                model_avg =  MLP(ent_model='hyperprior').cuda()
+                model_avg =  MLP(ent_model='factorized').cuda()
             for name, param in model_avg.named_parameters():
                 if param.requires_grad:
                     param.data = ema.shadow[name]

@@ -257,6 +257,36 @@ class MLP(nn.Module):
 
 
 
+class AE_fc(nn.Module):
+    def __init__(self):
+        self.encoder = nn.Sequential(
+            nn.Flatten(1),
+            nn.Linear(784, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 256),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(256, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 784),
+        )
+        self.entropy_model = FactorizedPrior(256)
+        self.round = Quantize.apply
+
+    def forward(sellf, x):
+        y = self.encoder(x)
+        y_hat  = self.round(y)
+        x_hat = self.decoder(y_hat)
+
+        rate = self.entropy_model(y_hat))
+
+        return x_hat, rate
+
+
 if __name__ == '__main__':
     #x = torch.rand([4, 3, 224, 224])
     #y = torch.rand([4, 3, 224, 224])
