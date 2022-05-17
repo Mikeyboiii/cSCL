@@ -38,8 +38,8 @@ def train(beta, final=False):
     else: 
         model = MLP(ent_model='factorized').cuda()
 
-    model.encoder.load_state_dict(torch.load(root + '/pretrained_models/Encoder_b2.000_ep39.pkl')['model'])
-    model.entropy_model.load_state_dict(torch.load('pretrained_models/Factorized_b2.000_ep39.pkl')['model'])
+    #model.encoder.load_state_dict(torch.load(root + '/pretrained_models/Encoder_b2.000_ep39.pkl')['model'])
+    #model.entropy_model.load_state_dict(torch.load('pretrained_models/Factorized_b2.000_ep39.pkl')['model'])
 
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.5, 0.999))
@@ -135,7 +135,8 @@ final = False
 #for beta in [0]:
 #for beta in [1, 1e-1, 1e-2]:
 #for beta in [1e-3, 1e-4, 1e-5]:
-for beta in [1e-4, 1e-3, 1e-2, 1e-1]:
+
+for beta in [0, 1e-4, 1e-3, 1e-2, 1e-1]:
 
     print('Beta =', beta, '| final =', final)
     train(beta=beta, final=final)
